@@ -210,22 +210,6 @@ function renderKpis(data) {
   `).join('');
 }
 
-function renderCommandTiles(data) {
-  const tiles = [
-    ['info', 'Guards', data.total_guards ?? 0, 'Users with Guard role'],
-    ['success', 'Active patrols', data.active_patrols ?? 0, 'Routes currently active'],
-    ['critical', 'Open incidents', data.open_incidents ?? 0, 'Unresolved incident records'],
-    ['navy', 'Completed shifts', data.completed_shifts ?? 0, 'Completed shift records'],
-  ];
-  $('commandTiles').innerHTML = tiles.map(([tone, title, value, meta]) => `
-    <article class="command-tile ${tone}">
-      <span>${esc(title)}</span>
-      <strong>${esc(String(value).padStart(2, '0'))}</strong>
-      <small>${esc(meta)}</small>
-    </article>
-  `).join('');
-}
-
 function renderActivity(items = []) {
   if (!items.length) {
     $('activityFeed').innerHTML = emptyState('No activity has been logged yet.', '', null);
@@ -327,7 +311,6 @@ function chartOptions(textColor) {
 
 async function loadDashboard() {
   const { data } = await api('/dashboard');
-  renderCommandTiles(data);
   renderKpis(data);
   renderActivity(data.activity?.map((item) => ['PP', item.action, `${item.entity_type} ${item.detail || ''}`, item.created_at, 'info', 'Logged']) || []);
   renderQuickActions();
