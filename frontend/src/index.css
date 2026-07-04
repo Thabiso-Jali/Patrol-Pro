@@ -1,0 +1,14 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f5f7fb;
+}
+
+input, textarea, button {
+  font: inherit;
+}
+
+button {
+  padding: 8px 16px;
+  cursor: pointer;
+}

@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Patrol Pro</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+</head>
+<body>
+  <div id="toast" class="toast" role="status"></div>
+
+  <main id="loginView" class="auth-shell">
+    <section class="auth-panel">
+      <div class="brand">
+        <img class="brand-mark" src="/assets/logos/patrol-pro-no-text-transparent.png" alt="" aria-hidden="true">
+        <span>Patrol Pro</span>
+      </div>
+      <h1>Security operations command</h1>
+      <p>Enterprise patrol management for professional security teams.</p>
+      <form id="loginForm" class="stack">
+        <label>Email
+          <input name="email" type="email" value="admin@patrolpro.local" autocomplete="email" required>
+        </label>
+        <label>Password
+          <input name="password" type="password" value="password" autocomplete="current-password" required>
+        </label>
+        <button class="btn primary" type="submit">Sign in</button>
+      </form>
+      <small>Demo accounts: admin@patrolpro.local, guard@patrolpro.local, client@patrolpro.local</small>
+    </section>
+  </main>
+
+  <div id="appView" class="app hidden">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <div class="brand">
+          <img class="brand-mark" src="/assets/logos/patrol-pro-no-text-transparent.png" alt="" aria-hidden="true">
+          <span class="sidebar-label">Patrol Pro</span>
+        </div>
+        <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Collapse sidebar" aria-expanded="true">‹</button>
+      </div>
+      <div class="operator-card">
+        <div class="operator-avatar" id="operatorAvatar">PP</div>
+        <div class="operator-copy">
+          <strong id="operatorName">Operator</strong>
+          <p id="operatorRole">Control room</p>
+        </div>
+        <span class="online-dot" aria-label="Online"></span>
+      </div>
+      <nav>
+        <button class="nav active" data-view="dashboard" title="Dashboard"><span>⌁</span><b class="nav-label">Dashboard</b></button>
+        <button class="nav" data-view="patrols" title="Patrols"><span>◎</span><b class="nav-label">Patrols</b></button>
+        <button class="nav" data-view="guards" title="Guards"><span>◉</span><b class="nav-label">Guards</b></button>
+        <button class="nav" data-view="incidents" title="Incidents"><span>△</span><b class="nav-label">Incidents</b></button>
+        <button class="nav" data-view="monitoring" title="Live Monitoring"><span>⌖</span><b class="nav-label">Live Monitoring</b></button>
+        <button class="nav" data-view="shifts" title="Shifts"><span>◷</span><b class="nav-label">Shifts</b></button>
+        <button class="nav" data-view="reports" title="Reports"><span>▤</span><b class="nav-label">Reports</b></button>
+        <button class="nav" data-view="client" title="Client Portal"><span>◇</span><b class="nav-label">Client Portal</b></button>
+      </nav>
+    </aside>
+
+    <section class="workspace">
+      <header class="topbar">
+        <button id="menuBtn" class="icon-btn">☰</button>
+        <div>
+          <h2 id="pageTitle">Dashboard</h2>
+          <p id="pageSubtitle">Live operational overview</p>
+        </div>
+        <div class="top-actions">
+          <label class="global-search" aria-label="Global search">
+            <span>⌕</span>
+            <input id="globalSearch" placeholder="Search patrols, incidents, guards">
+          </label>
+          <span id="dateTime" class="top-meta">Loading time</span>
+          <button id="darkModeBtn" class="icon-btn" aria-label="Toggle dark mode">◐</button>
+          <button id="notificationBtn" class="icon-btn notification-button" aria-label="Notifications">●<b id="notificationCount">0</b></button>
+          <div id="notificationMenu" class="notification-menu hidden"></div>
+          <span id="userBadge" class="pill">Loading</span>
+          <button id="logoutBtn" class="btn secondary">Logout</button>
+        </div>
+      </header>
+
+      <section id="dashboard" class="view active">
+        <div id="commandTiles" class="command-tiles"></div>
+        <div id="kpiGrid" class="kpi-grid"></div>
+        <div class="ops-command-grid">
+          <section class="panel">
+            <div class="panel-head"><h3>Live Activity Feed</h3><button class="btn ghost" data-refresh>Refresh</button></div>
+            <div id="activityFeed" class="feed"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h3>Operations Map</h3><span class="pill success">Live-ready</span></div>
+            <div class="dashboard-map">
+              <div class="mini-map-grid"></div>
+              <div id="dashboardMapMarkers" class="map-markers"></div>
+              <div class="map-callout">
+                <strong>Operations map</strong>
+                <span id="mapCallout">No active patrol data loaded</span>
+              </div>
+            </div>
+          </section>
+          <section class="panel command-panel">
+            <div class="panel-head"><h3>Available Actions</h3><span class="pill">Role based</span></div>
+            <div id="quickActions" class="quick-actions"></div>
+          </section>
+        </div>
+        <div class="analytics-grid">
+          <section class="panel"><div class="panel-head"><h3>Weekly Incident Trends</h3></div><canvas id="incidentTrendChart" height="150"></canvas></section>
+          <section class="panel"><div class="panel-head"><h3>Patrol Completion Rate</h3></div><canvas id="patrolCompletionChart" height="150"></canvas></section>
+          <section class="panel"><div class="panel-head"><h3>Incident Categories</h3></div><canvas id="incidentCategoryChart" height="150"></canvas></section>
+        </div>
+      </section>
+
+      <section id="patrols" class="view">
+        <div class="panel">
+          <div class="panel-head"><h3>Patrol Routes</h3><button class="btn primary" data-modal="patrolModal">New route</button></div>
+          <div id="patrolTable" class="table-wrap skeleton"></div>
+        </div>
+      </section>
+
+      <section id="guards" class="view">
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Guard Management</h3>
+            <div class="actions"><input id="guardSearch" placeholder="Filter guards"><button class="btn primary" data-modal="guardModal">Add guard</button></div>
+          </div>
+          <div id="guardCards" class="guard-card-grid"></div>
+          <div id="guardTable" class="table-wrap skeleton"></div>
+        </div>
+      </section>
+
+      <section id="incidents" class="view">
+        <div class="panel">
+          <div class="panel-head"><h3>Incident Reporting</h3><button class="btn primary" data-modal="incidentModal">Report incident</button></div>
+          <div class="table-toolbar">
+            <input id="incidentSearch" placeholder="Search incidents">
+            <select id="incidentPriorityFilter"><option value="">All priorities</option><option>critical</option><option>high</option><option>medium</option><option>low</option></select>
+            <select id="incidentStatusFilter"><option value="">All statuses</option><option>open</option><option>investigating</option><option>resolved</option></select>
+          </div>
+          <div id="incidentTable" class="table-wrap skeleton"></div>
+        </div>
+      </section>
+
+      <section id="monitoring" class="view">
+        <div class="grid two">
+          <section class="panel map-panel">
+            <div class="panel-head"><h3>Live Map</h3><span class="pill success">Polling fallback</span></div>
+            <div class="map-placeholder">
+              <span class="radar"></span>
+              <strong>Northbank Business Park</strong>
+              <p>Map provider placeholder. GPS pings and geofencing alerts can attach here.</p>
+              <div id="mapMarkers" class="map-markers"></div>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h3>Guard Status</h3></div>
+            <div id="guardStatus" class="status-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="shifts" class="view">
+        <div class="panel">
+          <div class="panel-head"><h3>Shift Calendar</h3><button class="btn primary" data-modal="shiftModal">Assign shift</button></div>
+          <div id="shiftTable" class="table-wrap skeleton"></div>
+        </div>
+      </section>
+
+      <section id="reports" class="view">
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Daily Patrol Reports</h3>
+            <div class="actions"><input id="reportDate" type="date"><button id="loadReportBtn" class="btn secondary">Load</button><button id="pdfBtn" class="btn primary">Export PDF</button></div>
+          </div>
+          <div id="reportOutput" class="report"></div>
+        </div>
+      </section>
+
+      <section id="client" class="view">
+        <div class="panel">
+          <div class="panel-head"><h3>Client Portal</h3><span class="pill">Restricted read-only view</span></div>
+          <div id="clientPortal" class="client-grid"></div>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <dialog id="guardModal">
+    <form method="dialog" class="modal-form" id="guardForm">
+      <h3>Add Guard</h3>
+      <input name="name" placeholder="Full name" required>
+      <input name="email" type="email" placeholder="Email" required>
+      <input name="password" type="password" placeholder="Temporary password" required>
+      <input name="badge_number" placeholder="Badge number" required>
+      <input name="phone" placeholder="Phone">
+      <div class="modal-actions">
+        <button class="btn secondary" type="button" data-close-modal>Back</button>
+        <button class="btn primary" value="submit">Save guard</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="patrolModal">
+    <form method="dialog" class="modal-form" id="patrolForm">
+      <h3>Create Patrol Route</h3>
+      <input name="client_id" type="number" value="1" required>
+      <input name="name" placeholder="Route name" required>
+      <input name="site_name" placeholder="Site name" required>
+      <textarea name="description" placeholder="Route description"></textarea>
+      <div class="modal-actions">
+        <button class="btn secondary" type="button" data-close-modal>Back</button>
+        <button class="btn primary" value="submit">Create route</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="incidentModal">
+    <form method="dialog" class="modal-form" id="incidentForm" enctype="multipart/form-data">
+      <h3>Report Incident</h3>
+      <input name="client_id" type="number" value="1" required>
+      <input name="title" placeholder="Incident title" required>
+      <select name="category"><option>Theft</option><option>Damage</option><option>Trespass</option><option>Safety</option></select>
+      <select name="severity"><option>medium</option><option>low</option><option>high</option><option>critical</option></select>
+      <textarea name="notes" placeholder="Notes or voice-to-text placeholder"></textarea>
+      <input name="evidence" type="file" accept="image/*">
+      <div class="modal-actions">
+        <button class="btn secondary" type="button" data-close-modal>Back</button>
+        <button class="btn primary" value="submit">Submit incident</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="shiftModal">
+    <form method="dialog" class="modal-form" id="shiftForm">
+      <h3>Assign Shift</h3>
+      <input name="guard_user_id" type="number" placeholder="Guard user ID" required>
+      <input name="route_id" type="number" placeholder="Route ID" required>
+      <input name="starts_at" type="datetime-local" required>
+      <input name="ends_at" type="datetime-local" required>
+      <div class="modal-actions">
+        <button class="btn secondary" type="button" data-close-modal>Back</button>
+        <button class="btn primary" value="submit">Assign</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="reviewModal">
+    <form method="dialog" class="modal-form review-modal" id="reviewForm">
+      <div class="panel-head">
+        <div>
+          <h3 id="reviewTitle">Review Details</h3>
+          <p id="reviewSubtitle" class="feed-meta">Record details and actions</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-modal aria-label="Close review">×</button>
+      </div>
+      <div id="reviewDetails" class="review-details"></div>
+      <div class="modal-actions">
+        <button class="btn secondary" type="button" data-close-modal>Back</button>
+        <button id="deleteReviewBtn" class="btn danger" type="button">Delete</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/assets/js/app.js" defer></script>
+</body>
+</html>
