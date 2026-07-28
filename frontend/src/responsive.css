@@ -1,0 +1,434 @@
+:root {
+  --pp-content-padding: 24px;
+  --pp-card-padding: 24px;
+  --pp-layout-gap: 24px;
+  --pp-card-radius: 16px;
+  --pp-kpi-font-size: 28px;
+  --pp-kpi-line-height: 36px;
+  --pp-kpi-icon-size: 56px;
+  --pp-kpi-icon-font-size: 28px;
+  --pp-kpi-align: flex-start;
+  --pp-table-filter-max-width: 320px;
+  --pp-table-cell-padding: 16px;
+  --pp-modal-align: center;
+  --pp-modal-width: 90%;
+  --pp-modal-max-width: 520px;
+  --pp-modal-max-height: 90vh;
+  --pp-modal-radius: 16px;
+  --pp-modal-padding: 24px;
+  --pp-notification-right: 24px;
+  --pp-notification-bottom: 24px;
+  --pp-auth-padding-top: 32px;
+  --pp-top-actions-gap: 16px;
+  --pp-avatar-size: 40px;
+  --pp-card-header-align: center;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+}
+
+html {
+  overflow-x: hidden;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+.pp-app-shell {
+  min-height: 100dvh;
+}
+
+.pp-app-column,
+.pp-main,
+.pp-main > * {
+  min-width: 0;
+}
+
+.pp-main {
+  padding: var(--pp-content-padding);
+  overscroll-behavior: contain;
+}
+
+.pp-card,
+.pp-skeleton-card {
+  min-width: 0;
+  padding: var(--pp-card-padding);
+}
+
+.pp-card-header,
+.pp-card-actions,
+.pp-page-heading-row,
+.pp-page-actions,
+.pp-form-actions,
+.pp-row-actions {
+  min-width: 0;
+}
+
+.pp-button {
+  min-height: 44px;
+  white-space: normal;
+}
+
+.pp-icon-button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pp-field {
+  min-height: 44px;
+}
+
+.pp-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: var(--pp-layout-gap);
+}
+
+.pp-dashboard-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: var(--pp-layout-gap);
+}
+
+.pp-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: var(--pp-layout-gap);
+}
+
+.pp-card-grid-wide {
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+}
+
+.pp-table-component {
+  min-width: 0;
+}
+
+.pp-table-controls {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.pp-table-filter {
+  flex: 1 1 200px;
+  min-width: 0;
+  max-width: 320px;
+  min-height: 44px;
+}
+
+.pp-table-scroller {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pp-table {
+  min-width: 620px;
+}
+
+.pp-table td,
+.pp-table th {
+  overflow-wrap: anywhere;
+}
+
+.pp-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pp-modal-backdrop {
+  padding: 16px;
+}
+
+.pp-modal {
+  width: min(520px, 100%);
+}
+
+.pp-mobile-nav,
+.pp-mobile-menu-button {
+  display: none;
+}
+
+.pp-desktop-sidebar,
+.pp-account {
+  display: flex;
+}
+
+.pp-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(15, 23, 42, 0.62);
+  border: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+}
+
+.pp-mobile-drawer {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 1110;
+  width: min(85vw, 340px);
+  height: 100dvh;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  box-shadow: 16px 0 40px rgba(15, 23, 42, 0.3);
+}
+
+.pp-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.pp-drawer-nav {
+  flex: 1;
+}
+
+.pp-drawer-nav-item,
+.pp-drawer-logout {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.pp-top-nav {
+  min-width: 0;
+  padding: 16px 24px;
+  gap: 24px;
+}
+
+.pp-mobile-title {
+  display: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pp-account-copy {
+  min-width: 0;
+}
+
+.pp-account-copy p {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1023px) {
+  :root {
+    --pp-content-padding: 22px;
+    --pp-card-padding: 20px;
+    --pp-layout-gap: 20px;
+  }
+
+  .pp-desktop-sidebar {
+    display: none;
+  }
+
+  .pp-mobile-nav,
+  .pp-mobile-menu-button,
+  .pp-mobile-title {
+    display: flex;
+  }
+
+  .pp-top-search,
+  .pp-top-notifications,
+  .pp-account-copy {
+    display: none;
+  }
+
+  .pp-top-nav {
+    min-height: 64px;
+    padding: 10px var(--pp-content-padding);
+    gap: 12px;
+  }
+
+  .pp-top-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .pp-dashboard-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pp-stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --pp-content-padding: 16px;
+    --pp-card-padding: 16px;
+    --pp-layout-gap: 16px;
+    --pp-card-radius: 12px;
+    --pp-kpi-font-size: 24px;
+    --pp-kpi-line-height: 30px;
+    --pp-kpi-icon-size: 44px;
+    --pp-kpi-icon-font-size: 22px;
+    --pp-table-filter-max-width: 100%;
+    --pp-table-cell-padding: 12px;
+    --pp-modal-align: flex-end;
+    --pp-modal-width: 100%;
+    --pp-modal-max-width: none;
+    --pp-modal-max-height: calc(100dvh - 16px);
+    --pp-modal-radius: 16px 16px 0 0;
+    --pp-modal-padding: 20px 16px max(16px, env(safe-area-inset-bottom));
+    --pp-notification-right: 16px;
+    --pp-notification-bottom: max(16px, env(safe-area-inset-bottom));
+    --pp-auth-padding-top: 8px;
+  }
+
+  .pp-main {
+    overflow-wrap: anywhere;
+  }
+
+  .pp-main h1 {
+    font-size: 26px !important;
+    line-height: 32px !important;
+  }
+
+  .pp-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pp-kpi-card .pp-card {
+    height: 100%;
+  }
+
+  .pp-page-heading-row {
+    align-items: stretch !important;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .pp-page-actions,
+  .pp-card-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .pp-page-actions .pp-button {
+    flex: 1 1 140px;
+  }
+
+  .pp-table-controls {
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .pp-table-filter {
+    flex-basis: 100%;
+  }
+
+  .pp-table {
+    min-width: 600px;
+  }
+
+  .pp-form-actions {
+    flex-direction: column-reverse;
+    gap: 8px !important;
+  }
+
+  .pp-modal-backdrop {
+    padding: 0;
+  }
+
+  .pp-notification {
+    left: 16px;
+  }
+}
+
+@media (max-width: 479px) {
+  :root {
+    --pp-content-padding: 12px;
+    --pp-card-padding: 14px;
+    --pp-layout-gap: 12px;
+    --pp-kpi-align: center;
+    --pp-card-header-align: flex-start;
+    --pp-top-actions-gap: 6px;
+    --pp-avatar-size: 36px;
+  }
+
+  .pp-main h1 {
+    font-size: 24px !important;
+    line-height: 30px !important;
+  }
+
+  .pp-stats-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pp-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pp-card-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .pp-card-actions {
+    align-self: stretch;
+  }
+
+  .pp-row-actions .pp-button {
+    flex: 1 1 120px;
+  }
+
+  .pp-top-nav {
+    min-height: 58px;
+  }
+
+}
+
+@media (min-width: 480px) and (max-width: 767px) {
+  .pp-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .pp-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

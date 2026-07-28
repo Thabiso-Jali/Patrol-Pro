@@ -60,7 +60,7 @@ const Skeleton = ({ width = '100%', height = 20, borderRadius = 6, style = {} })
 const SkeletonCard = () => {
   const { colors } = useTheme();
   return (
-    <div style={{ background: colors.cardBg, borderRadius: radius.lg, padding: spacing.lg, border: `1px solid ${colors.border}` }}>
+    <div className="pp-skeleton-card" style={{ background: colors.cardBg, borderRadius: 'var(--pp-card-radius)', padding: 'var(--pp-card-padding)', border: `1px solid ${colors.border}` }}>
       <Skeleton height={18} width='60%' style={{ marginBottom: spacing.sm }} />
       <Skeleton height={14} width='80%' style={{ marginBottom: spacing.md }} />
       <Skeleton height={14} width='40%' />
@@ -86,7 +86,7 @@ const SkeletonTable = ({ rows = 5, cols = 4 }) => {
   );
 };
 
-const Button = ({ children, variant = 'primary', size = 'md', disabled = false, icon, fullWidth = false, ...props }) => {
+const Button = ({ children, variant = 'primary', size = 'md', disabled = false, icon, fullWidth = false, className = '', ...props }) => {
   const { colors } = useTheme();
   const sizeStyles = {
     sm: { padding: `${spacing.xs} ${spacing.sm}`, ...typography.labelSm },
@@ -118,7 +118,7 @@ const Button = ({ children, variant = 'primary', size = 'md', disabled = false, 
   };
 
   return (
-    <button style={style} disabled={disabled} {...props}>
+    <button className={`pp-button ${className}`.trim()} style={style} disabled={disabled} {...props}>
       {icon && <Icon name={icon} size={16} />}
       {children}
     </button>
@@ -128,25 +128,25 @@ const Button = ({ children, variant = 'primary', size = 'md', disabled = false, 
 const Card = ({ children, header, actions, highlight = false }) => {
   const { colors } = useTheme();
   return (
-    <div style={{
+    <div className="pp-card" style={{
       background: colors.white,
-      borderRadius: radius.lg,
-      padding: spacing.lg,
+      borderRadius: 'var(--pp-card-radius)',
+      padding: 'var(--pp-card-padding)',
       boxShadow: highlight ? shadows.md : shadows.xs,
       border: `1px solid ${colors.border}`,
       transition: transitions.base,
     }}>
       {header && (
-        <div style={{
+        <div className="pp-card-header" style={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          alignItems: 'var(--pp-card-header-align)',
           marginBottom: spacing.md,
           paddingBottom: spacing.md,
           borderBottom: `1px solid ${colors.border}`,
         }}>
           <h3 style={{ ...typography.headingSm, margin: 0, color: colors.slate900 }}>{header}</h3>
-          {actions && <div style={{ display: 'flex', gap: spacing.sm }}>{actions}</div>}
+          {actions && <div className="pp-card-actions" style={{ display: 'flex', gap: spacing.sm }}>{actions}</div>}
         </div>
       )}
       {children}
@@ -206,6 +206,7 @@ const TextField = ({ label, value, onChange, type = 'text', error, placeholder, 
         value={safeValue}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        className="pp-field"
         style={{
           width: '100%',
           padding: spacing.md,
@@ -234,6 +235,7 @@ const SelectField = ({ label, value, onChange, options = [], placeholder = 'Sele
       <select
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
+        className="pp-field"
         style={{
           width: '100%',
           padding: spacing.md,
@@ -258,11 +260,12 @@ const KPICard = ({ title, value, subtitle, trend, icon, color }) => {
   const { colors } = useTheme();
   const resolvedColor = color || colors.rosePink;
   return (
+    <div className="pp-kpi-card">
     <Card highlight>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="pp-kpi-card-content" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'var(--pp-kpi-align)', gap: spacing.sm }}>
         <div>
           <p style={{ ...typography.bodySm, color: colors.slate500, margin: 0, marginBottom: spacing.sm }}>{title}</p>
-          <h2 style={{ ...typography.headingLg, margin: 0, color: colors.slate900 }}>{value}</h2>
+          <h2 className="pp-kpi-value" style={{ ...typography.headingLg, fontSize: 'var(--pp-kpi-font-size)', lineHeight: 'var(--pp-kpi-line-height)', margin: 0, color: colors.slate900 }}>{value}</h2>
           {subtitle && <p style={{ ...typography.bodySm, color: colors.slate500, margin: 0, marginTop: spacing.xs }}>{subtitle}</p>}
           {trend && (
             <div style={{ marginTop: spacing.sm }}>
@@ -273,15 +276,16 @@ const KPICard = ({ title, value, subtitle, trend, icon, color }) => {
           )}
         </div>
         {icon && (
-          <div style={{
-            width: 56, height: 56, background: `${resolvedColor}20`, borderRadius: radius.lg,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28,
+          <div className="pp-kpi-icon" style={{
+            width: 'var(--pp-kpi-icon-size)', height: 'var(--pp-kpi-icon-size)', background: `${resolvedColor}20`, borderRadius: radius.lg,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'var(--pp-kpi-icon-font-size)',
           }}>
             <Icon name={icon} size={28} />
           </div>
         )}
       </div>
     </Card>
+    </div>
   );
 };
 
@@ -352,24 +356,25 @@ const EnterpriseTable = ({ columns, rows, actions, pageSize = 10 }) => {
   const paginated = sorted.slice((page - 1) * pageSize, page * pageSize);
 
   return (
-    <div>
-      <div style={{ display: 'flex', gap: spacing.md, marginBottom: spacing.md, alignItems: 'center', flexWrap: 'wrap' }}>
+    <div className="pp-table-component">
+      <div className="pp-table-controls" style={{ display: 'flex', gap: spacing.md, marginBottom: spacing.md, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
           type='text'
           placeholder='Filter rows...'
           value={filter}
           onChange={(e) => { setFilter(e.target.value); setPage(1); }}
+          className="pp-table-filter"
           style={{
             padding: `${spacing.sm} ${spacing.md}`, border: `1px solid ${colors.border}`, borderRadius: radius.md,
-            ...typography.bodyMd, flex: 1, minWidth: 200, maxWidth: 320, background: colors.cardBg, color: colors.slate900,
+            ...typography.bodyMd, flex: 1, minWidth: 200, maxWidth: 'var(--pp-table-filter-max-width)', background: colors.cardBg, color: colors.slate900,
           }}
         />
         <span style={{ ...typography.bodySm, color: colors.slate500 }}>
           {sorted.length} row{sorted.length !== 1 ? 's' : ''}
         </span>
       </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: typography.bodyMd.fontSize }}>
+      <div className="pp-table-scroller" role="region" aria-label="Scrollable data table" tabIndex="0" style={{ overflowX: 'auto' }}>
+        <table className="pp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: typography.bodyMd.fontSize }}>
           <thead>
             <tr style={{ borderBottom: `2px solid ${colors.border}`, background: colors.lightGrey }}>
               {columns.map(({ key, label, sortable = true }) => (
@@ -377,7 +382,7 @@ const EnterpriseTable = ({ columns, rows, actions, pageSize = 10 }) => {
                   key={key}
                   onClick={() => sortable && handleSort(key)}
                   style={{
-                    padding: spacing.md, textAlign: 'left', ...typography.labelMd, color: colors.slate700, fontWeight: 600,
+                    padding: 'var(--pp-table-cell-padding)', textAlign: 'left', ...typography.labelMd, color: colors.slate700, fontWeight: 600,
                     cursor: sortable ? 'pointer' : 'default', userSelect: 'none',
                     whiteSpace: 'nowrap',
                   }}
@@ -391,7 +396,7 @@ const EnterpriseTable = ({ columns, rows, actions, pageSize = 10 }) => {
           </thead>
           <tbody>
             {paginated.length === 0 && (
-              <tr><td colSpan={columns.length + (actions ? 1 : 0)} style={{ padding: spacing.lg, textAlign: 'center', color: colors.slate500 }}>No results</td></tr>
+              <tr><td colSpan={columns.length + (actions ? 1 : 0)} style={{ padding: 'var(--pp-table-cell-padding)', textAlign: 'center', color: colors.slate500 }}>No results</td></tr>
             )}
             {paginated.map((row, i) => (
               <tr key={i}
@@ -400,11 +405,11 @@ const EnterpriseTable = ({ columns, rows, actions, pageSize = 10 }) => {
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
                 {columns.map(({ key }) => (
-                  <td key={key} style={{ padding: spacing.md, ...typography.bodyMd, color: colors.slate700 }}>
+                  <td key={key} style={{ padding: 'var(--pp-table-cell-padding)', ...typography.bodyMd, color: colors.slate700 }}>
                     {row.cells?.[key] ?? ''}
                   </td>
                 ))}
-                {actions && <td style={{ padding: spacing.md }}><div style={{ display: 'flex', gap: spacing.sm }}>{actions(row)}</div></td>}
+                {actions && <td style={{ padding: 'var(--pp-table-cell-padding)' }}><div className="pp-row-actions" style={{ display: 'flex', gap: spacing.sm }}>{actions(row)}</div></td>}
               </tr>
             ))}
           </tbody>
@@ -426,15 +431,15 @@ const Modal = ({ open, onClose, title, children }) => {
   if (!open) return null;
   const handleBackdropClick = (e) => { if (e.target === e.currentTarget) onClose(); };
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1050 }}
+    <div className="pp-modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)', display: 'flex', alignItems: 'var(--pp-modal-align)', justifyContent: 'center', zIndex: 1050 }}
       onClick={handleBackdropClick} onKeyDown={(e) => e.key === 'Escape' && onClose()}
     >
-      <div style={{ background: colors.cardBg, borderRadius: radius.lg, padding: spacing.lg, maxWidth: 520, width: '90%', boxShadow: shadows.xl, maxHeight: '90vh', overflowY: 'auto' }}
+      <div className="pp-modal" role="dialog" aria-modal="true" aria-label={title} style={{ background: colors.cardBg, borderRadius: 'var(--pp-modal-radius)', padding: 'var(--pp-modal-padding)', maxWidth: 'var(--pp-modal-max-width)', width: 'var(--pp-modal-width)', boxShadow: shadows.xl, maxHeight: 'var(--pp-modal-max-height)', overflowY: 'auto' }}
         onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg }}>
           <h2 style={{ ...typography.headingMd, margin: 0, color: colors.slate900 }}>{title}</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: colors.slate500 }}>
+          <button className="pp-icon-button" aria-label={`Close ${title}`} onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: colors.slate500 }}>
             <Icon name='x' size={20} />
           </button>
         </div>
@@ -460,10 +465,10 @@ const Notification = ({ message, type = 'success', onClose }) => {
   const v = variants[type];
 
   return (
-    <div style={{
+    <div className="pp-notification" style={{
       position: 'fixed',
-      bottom: spacing.lg,
-      right: spacing.lg,
+      bottom: 'var(--pp-notification-bottom)',
+      right: 'var(--pp-notification-right)',
       background: v.bg,
       color: v.text,
       padding: spacing.md,
@@ -548,7 +553,7 @@ export const DashboardContent = ({ stats, isLoading, error }) => {
           <h1 style={{ ...typography.headingXL, margin: 0, marginBottom: spacing.md, color: colors.slate900 }}>Dashboard</h1>
           <p role="status" style={{ ...typography.bodyLg, margin: 0, color: colors.slate500 }}>Loading dashboard statistics...</p>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: spacing.lg }}>
+        <div className="pp-stats-grid" style={{ marginBottom: spacing.lg }}>
           {[0, 1, 2, 3].map((item) => <SkeletonCard key={item} />)}
         </div>
       </div>
@@ -589,14 +594,14 @@ export const DashboardContent = ({ stats, isLoading, error }) => {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: spacing.lg, marginBottom: spacing.lg }}>
+      <div className="pp-stats-grid" style={{ marginBottom: spacing.lg }}>
         <KPICard title="Active Patrols" value={String(stats?.active_patrols ?? 0)} subtitle="Live patrol routes" icon="patrols" />
         <KPICard title="Officers" value={String(stats?.officers ?? 0)} subtitle="Active officer accounts" icon="officers" />
         <KPICard title="Open Incidents" value={String(stats?.open_incidents ?? 0)} subtitle="Needs attention" icon="incidents" />
         <KPICard title="Pending Checkpoints" value={String(stats?.pending_checkpoints ?? 0)} subtitle="Awaiting verification" icon="checkpoints" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: spacing.lg, marginBottom: spacing.lg }}>
+      <div className="pp-dashboard-panels" style={{ marginBottom: spacing.lg }}>
         <Card header="Active Patrols">
           <EnterpriseTable
             columns={[
@@ -653,6 +658,121 @@ export const DashboardContent = ({ stats, isLoading, error }) => {
   );
 };
 
+export const MobileNavigation = ({
+  open,
+  items,
+  activeNav,
+  onSelect,
+  onClose,
+  onLogout,
+}) => {
+  const { colors } = useTheme();
+  const drawerRef = useRef(null);
+  const closeButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !drawerRef.current) return;
+      const focusable = drawerRef.current.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="pp-mobile-nav">
+      <button className="pp-drawer-backdrop" aria-label="Close navigation" onClick={onClose} />
+      <aside
+        ref={drawerRef}
+        id="mobile-navigation"
+        className="pp-mobile-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Main navigation"
+        style={{ background: colors.sidebarBg, color: colors.sidebarText }}
+      >
+        <div className="pp-drawer-header">
+          <h2 style={{ ...typography.headingSm, margin: 0, color: colors.sidebarText }}>PatrolPro</h2>
+          <button
+            ref={closeButtonRef}
+            className="pp-icon-button"
+            aria-label="Close navigation"
+            onClick={onClose}
+            style={{ background: 'transparent', border: 0, color: colors.sidebarText }}
+          >
+            <Icon name="x" color={colors.sidebarText} />
+          </button>
+        </div>
+        <nav className="pp-drawer-nav" aria-label="Mobile">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              className="pp-drawer-nav-item"
+              aria-current={activeNav === item.id ? 'page' : undefined}
+              onClick={() => {
+                onSelect(item.id);
+                onClose();
+              }}
+              style={{
+                marginBottom: spacing.xs,
+                background: activeNav === item.id ? colors.rosePink : 'transparent',
+                color: colors.sidebarText,
+              }}
+            >
+              <Icon name={item.icon} size={20} color={colors.sidebarText} />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+        <button
+          className="pp-drawer-logout"
+          onClick={() => {
+            onClose();
+            onLogout();
+          }}
+          style={{
+            marginTop: spacing.md,
+            background: 'transparent',
+            color: colors.sidebarText,
+            borderTop: `1px solid ${colors.slate700}`,
+          }}
+        >
+          <Icon name="logout" size={20} color={colors.sidebarText} />
+          <span>Logout</span>
+        </button>
+      </aside>
+    </div>
+  );
+};
+
 // ==================== AUTH CONTENT COMPONENT ====================
 
 const AuthContent = ({ 
@@ -664,7 +784,7 @@ const AuthContent = ({
 }) => {
   const { colors } = useTheme();
   return (
-  <div style={{ maxWidth: 500, margin: '0 auto', paddingTop: spacing.xl }}>
+  <div className="pp-auth" style={{ maxWidth: 500, margin: '0 auto', paddingTop: 'var(--pp-auth-padding-top)' }}>
     <Card>
       <h1 style={{ ...typography.headingLg, margin: 0, marginBottom: spacing.lg, textAlign: 'center', color: colors.slate900 }}>
         Security Operations Platform
@@ -728,9 +848,9 @@ const PatrolsContent = ({
   const { colors } = useTheme();
   return (
   <div>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg }}>
+    <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg }}>
       <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Patrols</h1>
-      <div style={{ display: 'flex', gap: spacing.md }}>
+      <div className="pp-page-actions" style={{ display: 'flex', gap: spacing.md }}>
         <Button onClick={loadPatrols} variant="secondary" icon="load">Refresh</Button>
         <Button onClick={() => setShowPatrolModal(true)} icon="add">New Patrol</Button>
       </div>
@@ -772,17 +892,13 @@ const PatrolsContent = ({
         value={patrolForm.end_time}
         onChange={(v) => setPatrolForm({ ...patrolForm, end_time: v })}
       />
-      <div style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
+      <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
         <Button onClick={() => setShowPatrolModal(false)} variant="secondary" fullWidth>Cancel</Button>
         <Button onClick={handleCreatePatrol} fullWidth>Create Patrol</Button>
       </div>
     </Modal>
 
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-      gap: spacing.lg,
-    }}>
+    <div className="pp-card-grid">
       {patrols.map((patrol) => (
         <Card key={patrol.id} highlight>
           <h3 style={{ ...typography.headingSm, margin: 0, marginBottom: spacing.sm, color: colors.slate900 }}>
@@ -818,7 +934,7 @@ const PatrolsContent = ({
               </p>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: spacing.sm }}>
+          <div className="pp-row-actions" style={{ display: 'flex', gap: spacing.sm }}>
             <Button variant="secondary" size="sm" fullWidth icon="edit" onClick={() => startEditPatrol(patrol)}>Edit</Button>
             <Button variant="danger" size="sm" fullWidth icon="trash" onClick={() => handleDeletePatrol(patrol.id)}>Delete</Button>
           </div>
@@ -875,7 +991,7 @@ const PatrolsContent = ({
           value={patrolForm.end_time}
           onChange={(v) => setPatrolForm({ ...patrolForm, end_time: v })}
         />
-        <div style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
           <Button onClick={onCloseEditPatrol} variant="secondary" fullWidth>Cancel</Button>
           <Button onClick={handleUpdatePatrol} fullWidth>Update Patrol</Button>
         </div>
@@ -890,12 +1006,14 @@ function AppInner() {
   const { colors, dark, toggle } = useTheme();
   const [activeNav, setActiveNav] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [token, setToken] = useState('');
   const [userRole, setUserRole] = useState('officer');
   const [notification, setNotification] = useState(null);
   const [dashboardStats, setDashboardStats] = useState(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState('');
+  const mobileMenuButtonRef = useRef(null);
 
   // Auth state
   const [email, setEmail] = useState('');
@@ -1648,6 +1766,17 @@ function AppInner() {
 
   const roleLevels = { officer: 1, supervisor: 2, admin: 3 };
   const visibleNavItems = navItems.filter((item) => roleLevels[userRole] >= roleLevels[item.minRole]);
+  const activePageLabel = visibleNavItems.find((item) => item.id === activeNav)?.label || 'PatrolPro';
+  const closeMobileNav = useCallback(() => {
+    setMobileNavOpen(false);
+    window.requestAnimationFrame(() => mobileMenuButtonRef.current?.focus());
+  }, []);
+  const handleLogout = () => {
+    setToken('');
+    setUserRole('officer');
+    setMobileNavOpen(false);
+    notify('Logged out');
+  };
 
   useEffect(() => {
     if (!token) return;
@@ -1657,16 +1786,24 @@ function AppInner() {
     }
   }, [token, userRole, activeNav]);
 
+  useEffect(() => {
+    const desktopQuery = window.matchMedia('(min-width: 1024px)');
+    const closeDrawerOnDesktop = (event) => {
+      if (event.matches) setMobileNavOpen(false);
+    };
+    desktopQuery.addEventListener?.('change', closeDrawerOnDesktop);
+    return () => desktopQuery.removeEventListener?.('change', closeDrawerOnDesktop);
+  }, []);
+
   // Sidebar
   const Sidebar = () => {
     const { colors } = useTheme();
     return (
-    <div style={{
+    <div className="pp-desktop-sidebar" style={{
       width: sidebarOpen ? 280 : 80,
       background: colors.sidebarBg,
       color: colors.sidebarText,
       padding: spacing.lg,
-      display: 'flex',
       flexDirection: 'column',
       transition: transitions.base,
       borderRight: `1px solid ${colors.border}`,
@@ -1675,7 +1812,7 @@ function AppInner() {
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg }}>
         {sidebarOpen && <h1 style={{ ...typography.headingMd, margin: 0, fontSize: 20, color: colors.sidebarText }}>PatrolPro</h1>}
-        <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: 'transparent', border: 'none', color: colors.sidebarText, cursor: 'pointer', fontSize: 20 }}>
+        <button className="pp-icon-button" aria-label={sidebarOpen ? 'Collapse navigation' : 'Expand navigation'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: 'transparent', border: 'none', color: colors.sidebarText, cursor: 'pointer', fontSize: 20 }}>
           <Icon name='menu' size={20} color={colors.sidebarText} />
         </button>
       </div>
@@ -1683,6 +1820,7 @@ function AppInner() {
         {visibleNavItems.map((item) => (
           <button
             key={item.id}
+            aria-current={activeNav === item.id ? 'page' : undefined}
             onClick={() => setActiveNav(item.id)}
             style={{
               width: '100%', padding: spacing.md, marginBottom: spacing.sm,
@@ -1701,7 +1839,7 @@ function AppInner() {
       </nav>
       <div style={{ paddingTop: spacing.lg, borderTop: `1px solid ${colors.border}` }}>
         {token && (
-          <button onClick={() => { setToken(''); setUserRole('officer'); notify('Logged out'); }} style={{
+          <button onClick={handleLogout} style={{
             width: '100%', padding: spacing.md, background: 'transparent', border: 'none',
             color: colors.sidebarText, borderRadius: radius.md, cursor: 'pointer',
             display: 'flex', alignItems: 'center', gap: spacing.md, transition: transitions.fast,
@@ -1719,17 +1857,30 @@ function AppInner() {
   const TopNav = ({ darkMode, toggleDark }) => {
     const { colors } = useTheme();
     return (
-    <div style={{
+    <div className="pp-top-nav" style={{
       background: colors.cardBg,
       borderBottom: `1px solid ${colors.border}`,
-      padding: `${spacing.md} ${spacing.lg}`,
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      gap: spacing.lg,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md, flex: 1 }}>
+      <div className="pp-top-left" style={{ display: 'flex', alignItems: 'center', gap: spacing.md, flex: 1 }}>
+        <button
+          ref={mobileMenuButtonRef}
+          className="pp-mobile-menu-button pp-icon-button"
+          aria-label="Open navigation"
+          aria-controls="mobile-navigation"
+          aria-expanded={mobileNavOpen}
+          onClick={() => setMobileNavOpen(true)}
+          style={{ background: colors.lightGrey, border: `1px solid ${colors.border}`, borderRadius: radius.md, color: colors.slate900 }}
+        >
+          <Icon name="menu" size={20} />
+        </button>
+        <strong className="pp-mobile-title" style={{ ...typography.headingXs, color: colors.slate900 }}>
+          {activePageLabel}
+        </strong>
         <input
+          className="pp-top-search"
           type='text'
           placeholder='Search patrols, incidents, officers...'
           style={{
@@ -1739,23 +1890,25 @@ function AppInner() {
           }}
         />
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md }}>
+      <div className="pp-top-actions" style={{ display: 'flex', alignItems: 'center', gap: 'var(--pp-top-actions-gap)' }}>
         <button
+          className="pp-icon-button"
+          aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
           onClick={toggleDark}
           title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           style={{ background: colors.lightGrey, border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: `${spacing.xs} ${spacing.sm}`, cursor: 'pointer', fontSize: 18 }}
         >
           {darkMode ? '☀️' : '🌙'}
         </button>
-        <button style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', opacity: 0.7 }}>
+        <button className="pp-top-notifications pp-icon-button" aria-label="Notifications" style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', opacity: 0.7 }}>
           <Icon name='bell' size={20} />
         </button>
         {token ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md }}>
-            <div style={{ width: 40, height: 40, borderRadius: '50%', background: colors.rosePink, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>
+          <div className="pp-account" style={{ alignItems: 'center', gap: spacing.md }}>
+            <div className="pp-avatar" aria-hidden="true" style={{ width: 'var(--pp-avatar-size)', height: 'var(--pp-avatar-size)', borderRadius: '50%', background: colors.rosePink, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>
               {email.charAt(0).toUpperCase()}
             </div>
-            <div>
+            <div className="pp-account-copy">
               <p style={{ ...typography.bodyMd, margin: 0, fontWeight: 600, color: colors.slate900 }}>{email.split('@')[0]}</p>
               <p style={{ ...typography.bodySm, margin: 0, color: colors.slate500, textTransform: 'capitalize' }}>{userRole}</p>
             </div>
@@ -1770,7 +1923,7 @@ function AppInner() {
   const OfficersContent = () => (
     <div>
       <div style={{ marginBottom: spacing.lg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+        <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
           <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Officers</h1>
           <Button icon="add">Add Officer</Button>
         </div>
@@ -1779,11 +1932,7 @@ function AppInner() {
         </p>
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-        gap: spacing.lg,
-      }}>
+      <div className="pp-card-grid">
         {officers.map((officer) => (
           <Card key={officer.id} highlight>
             <h3 style={{ ...typography.headingSm, margin: 0, marginBottom: spacing.sm, color: colors.slate900 }}>
@@ -1812,7 +1961,7 @@ function AppInner() {
                 <p style={{ ...typography.bodyMd, margin: 0, fontWeight: 500 }}>{officer.zone}</p>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: spacing.sm }}>
+            <div className="pp-row-actions" style={{ display: 'flex', gap: spacing.sm }}>
               <Button variant="secondary" size="sm" fullWidth icon="edit" onClick={() => startEditOfficer(officer)}>Edit</Button>
               <Button variant="danger" size="sm" fullWidth icon="trash" onClick={() => requestRemoveOfficer(officer.id)}>Remove</Button>
             </div>
@@ -1846,7 +1995,7 @@ function AppInner() {
           onChange={(v) => setOfficerForm({ ...officerForm, zone: v })}
           placeholder="Zone A"
         />
-        <div style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
           <Button onClick={closeEditOfficer} variant="secondary" fullWidth>Cancel</Button>
           <Button onClick={handleUpdateOfficer} fullWidth>Save Changes</Button>
         </div>
@@ -1856,7 +2005,7 @@ function AppInner() {
         <p style={{ ...typography.bodyMd, color: colors.slate700, marginBottom: spacing.lg }}>
           Are you sure you want to remove this officer?
         </p>
-        <div style={{ display: 'flex', gap: spacing.md }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md }}>
           <Button onClick={closeRemoveOfficer} variant="secondary" fullWidth>Cancel</Button>
           <Button onClick={confirmRemoveOfficer} variant="danger" fullWidth>Remove</Button>
         </div>
@@ -1868,7 +2017,7 @@ function AppInner() {
   const IncidentsContent = () => (
     <div>
       <div style={{ marginBottom: spacing.lg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+        <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
           <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Incidents</h1>
           <Button icon="add">Report Incident</Button>
         </div>
@@ -1877,11 +2026,7 @@ function AppInner() {
         </p>
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-        gap: spacing.lg,
-      }}>
+      <div className="pp-card-grid">
         {incidents.map((incident) => (
           <Card key={incident.id} highlight>
             <h3 style={{ ...typography.headingSm, margin: 0, marginBottom: spacing.sm, color: colors.slate900 }}>
@@ -1914,7 +2059,7 @@ function AppInner() {
                 </Badge>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: spacing.sm }}>
+            <div className="pp-row-actions" style={{ display: 'flex', gap: spacing.sm }}>
               <Button variant="secondary" size="sm" fullWidth icon="edit" onClick={() => startEditIncident(incident)}>Edit</Button>
               <Button variant="danger" size="sm" fullWidth icon="trash" onClick={() => requestRemoveIncident(incident.id)}>Remove</Button>
             </div>
@@ -1948,7 +2093,7 @@ function AppInner() {
           onChange={(v) => setIncidentForm({ ...incidentForm, status: v })}
           placeholder="open | investigating | resolved"
         />
-        <div style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
           <Button onClick={closeEditIncident} variant="secondary" fullWidth>Cancel</Button>
           <Button onClick={handleUpdateIncident} fullWidth>Save Changes</Button>
         </div>
@@ -1958,7 +2103,7 @@ function AppInner() {
         <p style={{ ...typography.bodyMd, color: colors.slate700, marginBottom: spacing.lg }}>
           Are you sure you want to remove this incident?
         </p>
-        <div style={{ display: 'flex', gap: spacing.md }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md }}>
           <Button onClick={closeRemoveIncident} variant="secondary" fullWidth>Cancel</Button>
           <Button onClick={confirmRemoveIncident} variant="danger" fullWidth>Remove</Button>
         </div>
@@ -1970,7 +2115,7 @@ function AppInner() {
   const CheckpointsContent = () => (
     <div>
       <div style={{ marginBottom: spacing.lg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+        <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
           <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Checkpoints</h1>
           <Button icon="add">Add Checkpoint</Button>
         </div>
@@ -1979,11 +2124,7 @@ function AppInner() {
         </p>
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-        gap: spacing.lg,
-      }}>
+      <div className="pp-card-grid">
         {checkpoints.map((checkpoint) => (
           <Card key={checkpoint.id} highlight>
             <h3 style={{ ...typography.headingSm, margin: 0, marginBottom: spacing.sm, color: colors.slate900 }}>
@@ -2014,7 +2155,7 @@ function AppInner() {
                 </p>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: spacing.sm }}>
+            <div className="pp-row-actions" style={{ display: 'flex', gap: spacing.sm }}>
               <Button variant="secondary" size="sm" fullWidth icon="edit" onClick={() => startEditCheckpoint(checkpoint)}>Edit</Button>
               <Button variant="danger" size="sm" fullWidth icon="trash" onClick={() => requestRemoveCheckpoint(checkpoint.id)}>Remove</Button>
             </div>
@@ -2048,7 +2189,7 @@ function AppInner() {
           value={checkpointForm.lastCheck}
           onChange={(v) => setCheckpointForm({ ...checkpointForm, lastCheck: v })}
         />
-        <div style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
           <Button onClick={closeEditCheckpoint} variant="secondary" fullWidth>Cancel</Button>
           <Button onClick={handleUpdateCheckpoint} fullWidth>Save Changes</Button>
         </div>
@@ -2058,7 +2199,7 @@ function AppInner() {
         <p style={{ ...typography.bodyMd, color: colors.slate700, marginBottom: spacing.lg }}>
           Are you sure you want to remove this checkpoint?
         </p>
-        <div style={{ display: 'flex', gap: spacing.md }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md }}>
           <Button onClick={closeRemoveCheckpoint} variant="secondary" fullWidth>Cancel</Button>
           <Button onClick={confirmRemoveCheckpoint} variant="danger" fullWidth>Remove</Button>
         </div>
@@ -2069,7 +2210,7 @@ function AppInner() {
   const ReportsContent = () => (
     <div>
       <div style={{ marginBottom: spacing.lg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+        <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
           <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Reports</h1>
           <Button icon="add" onClick={generateReport}>Generate Report</Button>
         </div>
@@ -2120,12 +2261,7 @@ function AppInner() {
           </p>
         </div>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: spacing.lg,
-          marginBottom: spacing.lg,
-        }}>
+        <div className="pp-stats-grid" style={{ marginBottom: spacing.lg }}>
           <KPICard title="Open Incidents" value={String(openIncidents)} subtitle="Needs active follow-up" icon="incidents" color={colors.error} />
           <KPICard title="On-Duty Officers" value={String(onDutyOfficers)} subtitle="Currently active" icon="officers" color={colors.success} />
           <KPICard title="Active Checkpoints" value={String(activeCheckpoints)} subtitle="Perimeter verified" icon="checkpoints" color={colors.blushPink} />
@@ -2153,9 +2289,9 @@ function AppInner() {
   const VehiclesContent = () => (
     <div>
       <div style={{ marginBottom: spacing.lg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+        <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
           <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Vehicles</h1>
-          <div style={{ display: 'flex', gap: spacing.md }}>
+          <div className="pp-page-actions" style={{ display: 'flex', gap: spacing.md }}>
             <Button variant="secondary" icon="load" onClick={loadVehicles}>Refresh</Button>
             <Button icon="add" onClick={() => setShowVehicleModal(true)}>Add Vehicle</Button>
           </div>
@@ -2189,7 +2325,7 @@ function AppInner() {
         <TextField label="Unit Name" value={vehicleForm.name} onChange={(v) => setVehicleForm({ ...vehicleForm, name: v })} placeholder="Patrol SUV 01" autoFocus={true} />
         <TextField label="Unit ID" value={vehicleForm.serial_number} onChange={(v) => setVehicleForm({ ...vehicleForm, serial_number: v })} placeholder="SUV-01" />
         <TextField label="Status" value={vehicleForm.status} onChange={(v) => setVehicleForm({ ...vehicleForm, status: v })} placeholder="active | maintenance" />
-        <div style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
           <Button variant="secondary" fullWidth onClick={() => setShowVehicleModal(false)}>Cancel</Button>
           <Button fullWidth onClick={handleCreateVehicle}>Create</Button>
         </div>
@@ -2199,7 +2335,7 @@ function AppInner() {
         <TextField label="Unit Name" value={vehicleForm.name} onChange={(v) => setVehicleForm({ ...vehicleForm, name: v })} placeholder="Patrol SUV 01" autoFocus={true} />
         <TextField label="Unit ID" value={vehicleForm.serial_number} onChange={(v) => setVehicleForm({ ...vehicleForm, serial_number: v })} placeholder="SUV-01" />
         <TextField label="Status" value={vehicleForm.status} onChange={(v) => setVehicleForm({ ...vehicleForm, status: v })} placeholder="active | maintenance" />
-        <div style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
           <Button variant="secondary" fullWidth onClick={closeEditVehicle}>Cancel</Button>
           <Button fullWidth onClick={handleUpdateVehicle}>Save</Button>
         </div>
@@ -2207,7 +2343,7 @@ function AppInner() {
 
       <Modal open={showRemoveVehicleModal} onClose={closeRemoveVehicle} title="Remove Vehicle">
         <p style={{ ...typography.bodyMd, color: colors.slate700, marginBottom: spacing.lg }}>Are you sure you want to remove this vehicle?</p>
-        <div style={{ display: 'flex', gap: spacing.md }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md }}>
           <Button variant="secondary" fullWidth onClick={closeRemoveVehicle}>Cancel</Button>
           <Button variant="danger" fullWidth onClick={confirmRemoveVehicle}>Remove</Button>
         </div>
@@ -2218,9 +2354,9 @@ function AppInner() {
   const CommunicationsContent = () => (
     <div>
       <div style={{ marginBottom: spacing.lg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+        <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
           <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Communications</h1>
-          <div style={{ display: 'flex', gap: spacing.md }}>
+          <div className="pp-page-actions" style={{ display: 'flex', gap: spacing.md }}>
             <Button variant="secondary" icon="load" onClick={loadCommunications}>Refresh</Button>
             <Button icon="add" onClick={() => setShowCommunicationModal(true)}>Log Message</Button>
           </div>
@@ -2230,11 +2366,7 @@ function AppInner() {
         </p>
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-        gap: spacing.lg,
-      }}>
+      <div className="pp-card-grid pp-card-grid-wide">
         {communications.map((item) => (
           <Card key={item.id} highlight>
             <h3 style={{ ...typography.headingSm, margin: 0, marginBottom: spacing.sm, color: colors.slate900 }}>{item.title}</h3>
@@ -2246,7 +2378,7 @@ function AppInner() {
             <p style={{ ...typography.labelSm, color: colors.slate500, marginBottom: spacing.md }}>
               Reported: {formatDateTime(item.reported_at)}
             </p>
-            <div style={{ display: 'flex', gap: spacing.sm }}>
+            <div className="pp-row-actions" style={{ display: 'flex', gap: spacing.sm }}>
               <Button size="sm" variant="secondary" fullWidth icon="edit" onClick={() => startEditCommunication(item)}>Edit</Button>
               <Button size="sm" variant="danger" fullWidth icon="trash" onClick={() => requestRemoveCommunication(item.id)}>Remove</Button>
             </div>
@@ -2259,7 +2391,7 @@ function AppInner() {
         <TextField label="Description" value={communicationForm.description} onChange={(v) => setCommunicationForm({ ...communicationForm, description: v })} placeholder="Message details" />
         <TextField label="Severity" value={communicationForm.severity} onChange={(v) => setCommunicationForm({ ...communicationForm, severity: v })} placeholder="high | medium | low" />
         <TextField label="Status" value={communicationForm.status} onChange={(v) => setCommunicationForm({ ...communicationForm, status: v })} placeholder="open | investigating | resolved" />
-        <div style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
           <Button variant="secondary" fullWidth onClick={() => setShowCommunicationModal(false)}>Cancel</Button>
           <Button fullWidth onClick={handleCreateCommunication}>Create</Button>
         </div>
@@ -2270,7 +2402,7 @@ function AppInner() {
         <TextField label="Description" value={communicationForm.description} onChange={(v) => setCommunicationForm({ ...communicationForm, description: v })} placeholder="Message details" />
         <TextField label="Severity" value={communicationForm.severity} onChange={(v) => setCommunicationForm({ ...communicationForm, severity: v })} placeholder="high | medium | low" />
         <TextField label="Status" value={communicationForm.status} onChange={(v) => setCommunicationForm({ ...communicationForm, status: v })} placeholder="open | investigating | resolved" />
-        <div style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
           <Button variant="secondary" fullWidth onClick={closeEditCommunication}>Cancel</Button>
           <Button fullWidth onClick={handleUpdateCommunication}>Save</Button>
         </div>
@@ -2278,7 +2410,7 @@ function AppInner() {
 
       <Modal open={showRemoveCommunicationModal} onClose={closeRemoveCommunication} title="Remove Communication">
         <p style={{ ...typography.bodyMd, color: colors.slate700, marginBottom: spacing.lg }}>Are you sure you want to remove this communication record?</p>
-        <div style={{ display: 'flex', gap: spacing.md }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md }}>
           <Button variant="secondary" fullWidth onClick={closeRemoveCommunication}>Cancel</Button>
           <Button variant="danger" fullWidth onClick={confirmRemoveCommunication}>Remove</Button>
         </div>
@@ -2289,9 +2421,9 @@ function AppInner() {
   const DocumentsContent = () => (
     <div>
       <div style={{ marginBottom: spacing.lg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+        <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
           <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Documents</h1>
-          <div style={{ display: 'flex', gap: spacing.md }}>
+          <div className="pp-page-actions" style={{ display: 'flex', gap: spacing.md }}>
             <Button variant="secondary" icon="load" onClick={loadDocuments}>Refresh</Button>
             <Button icon="add" onClick={() => setShowDocumentModal(true)}>Add Site File</Button>
           </div>
@@ -2327,7 +2459,7 @@ function AppInner() {
         <TextField label="Contact Email" value={documentForm.contact_email} onChange={(v) => setDocumentForm({ ...documentForm, contact_email: v })} placeholder="ops@example.com" />
         <TextField label="Phone" value={documentForm.phone} onChange={(v) => setDocumentForm({ ...documentForm, phone: v })} placeholder="555-1000" />
         <TextField label="Address" value={documentForm.address} onChange={(v) => setDocumentForm({ ...documentForm, address: v })} placeholder="100 Main St" />
-        <div style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
           <Button variant="secondary" fullWidth onClick={() => setShowDocumentModal(false)}>Cancel</Button>
           <Button fullWidth onClick={handleCreateDocument}>Create</Button>
         </div>
@@ -2338,7 +2470,7 @@ function AppInner() {
         <TextField label="Contact Email" value={documentForm.contact_email} onChange={(v) => setDocumentForm({ ...documentForm, contact_email: v })} placeholder="ops@example.com" />
         <TextField label="Phone" value={documentForm.phone} onChange={(v) => setDocumentForm({ ...documentForm, phone: v })} placeholder="555-1000" />
         <TextField label="Address" value={documentForm.address} onChange={(v) => setDocumentForm({ ...documentForm, address: v })} placeholder="100 Main St" />
-        <div style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
           <Button variant="secondary" fullWidth onClick={closeEditDocument}>Cancel</Button>
           <Button fullWidth onClick={handleUpdateDocument}>Save</Button>
         </div>
@@ -2346,7 +2478,7 @@ function AppInner() {
 
       <Modal open={showRemoveDocumentModal} onClose={closeRemoveDocument} title="Remove Site Document">
         <p style={{ ...typography.bodyMd, color: colors.slate700, marginBottom: spacing.lg }}>Are you sure you want to remove this site document?</p>
-        <div style={{ display: 'flex', gap: spacing.md }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md }}>
           <Button variant="secondary" fullWidth onClick={closeRemoveDocument}>Cancel</Button>
           <Button variant="danger" fullWidth onClick={confirmRemoveDocument}>Remove</Button>
         </div>
@@ -2357,7 +2489,7 @@ function AppInner() {
   const UsersContent = () => (
     <div>
       <div style={{ marginBottom: spacing.lg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+        <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
           <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Users</h1>
           <Button icon="add" onClick={() => setShowUserModal(true)}>Invite User</Button>
         </div>
@@ -2387,7 +2519,7 @@ function AppInner() {
         <TextField label="Full Name" value={userForm.full_name} onChange={(v) => setUserForm({ ...userForm, full_name: v })} placeholder="Alex Morgan" autoFocus={true} />
         <TextField label="Email" value={userForm.email} onChange={(v) => setUserForm({ ...userForm, email: v })} placeholder="alex@patrolpro.com" />
         <TextField label="Temporary Password" type="password" value={userForm.password} onChange={(v) => setUserForm({ ...userForm, password: v })} placeholder="Temporary password" />
-        <div style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
+        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
           <Button variant="secondary" fullWidth onClick={() => setShowUserModal(false)}>Cancel</Button>
           <Button fullWidth onClick={handleInviteUser}>Invite</Button>
         </div>
@@ -2490,16 +2622,27 @@ function AppInner() {
   };
 
   return (
-    <div style={{
+    <div className="pp-app-shell" style={{
       display: 'flex',
-      height: '100vh',
+      minHeight: '100dvh',
+      height: '100dvh',
       background: colors.pageBg,
       fontFamily: '"Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif',
       color: colors.slate900,
     }}>
       {token && <Sidebar />}
+      {token && (
+        <MobileNavigation
+          open={mobileNavOpen}
+          items={visibleNavItems}
+          activeNav={activeNav}
+          onSelect={setActiveNav}
+          onClose={closeMobileNav}
+          onLogout={handleLogout}
+        />
+      )}
 
-      <div style={{
+      <div className="pp-app-column" style={{
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
@@ -2507,10 +2650,10 @@ function AppInner() {
       }}>
         {token && <TopNav darkMode={dark} toggleDark={toggle} />}
 
-        <main style={{
+        <main className="pp-main" style={{
           flex: 1,
           overflow: 'auto',
-          padding: spacing.lg,
+          padding: 'var(--pp-content-padding)',
           background: colors.pageBg,
         }}>
           {renderContent()}

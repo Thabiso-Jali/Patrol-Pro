@@ -2,6 +2,8 @@ body {
   margin: 0;
   font-family: system-ui, sans-serif;
   background: #f5f7fb;
+  min-width: 320px;
+  overflow-x: hidden;
 }
 
 input, textarea, button {
