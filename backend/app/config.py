@@ -1,78 +1,140 @@
-"""Centralized application settings for all runtime environments."""
+"""Typed, environment-driven application settings."""
 
 import json
-import os
 from functools import lru_cache
+from typing import Any, Literal
 
-from dotenv import load_dotenv
+from pydantic import AliasChoices, Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv()
-
-
-def _to_bool(value: str, default: bool) -> bool:
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+DEVELOPMENT_JWT_PLACEHOLDER = "development-only-change-me"
 
 
-def _to_list(value: str | None, default: list[str]) -> list[str]:
-    if not value:
-        return default
-    try:
-        parsed = json.loads(value)
-        if isinstance(parsed, list):
-            return [str(item).strip() for item in parsed if str(item).strip()]
-    except json.JSONDecodeError:
-        pass
-    return [item.strip() for item in value.split(",") if item.strip()]
-
-
-class Settings:
-    # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./patrol_pro.db")
-
-    # Security
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "please-change-this-secret-key-for-production")
-    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
-    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
-    SESSION_IDLE_TIMEOUT_MINUTES: int = int(os.getenv("SESSION_IDLE_TIMEOUT_MINUTES", "30"))
-
-    # Rate limiting
-    RATE_LIMIT_MAX_REQUESTS: int = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "120"))
-    RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
-
-    # Server
-    HOST: str = os.getenv("HOST", "127.0.0.1")
-    PORT: int = int(os.getenv("PORT", "8000"))
-    DEBUG: bool = _to_bool(os.getenv("DEBUG"), True)
-    RELOAD: bool = _to_bool(os.getenv("RELOAD"), True)
-
-    # CORS
-    ALLOWED_ORIGINS: list[str] = _to_list(
-        os.getenv("ALLOWED_ORIGINS"),
-        [
-            "http://localhost:3000",
-            "http://localhost:3001",
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:3001",
-        ],
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+        enable_decoding=False,
     )
 
-    # Security headers
-    ENABLE_SECURITY_HEADERS: bool = _to_bool(os.getenv("ENABLE_SECURITY_HEADERS"), True)
-    ENABLE_RATE_LIMITING: bool = _to_bool(os.getenv("ENABLE_RATE_LIMITING"), True)
+    APP_ENV: Literal["development", "demo", "production"] = "development"
+    APP_NAME: str = Field(
+        default="Patrol Pro API",
+        validation_alias=AliasChoices("APP_NAME", "API_TITLE"),
+    )
+    DEBUG: bool = False
+    DATABASE_URL: str = "sqlite:///./patrol_pro.db"
 
-    # API
-    API_TITLE: str = os.getenv("API_TITLE", "Patrol Pro API")
-    API_VERSION: str = os.getenv("API_VERSION", "1.0.0")
-    API_DESCRIPTION: str = os.getenv("API_DESCRIPTION", "Professional security patrol management platform")
+    JWT_SECRET_KEY: str = Field(
+        default=DEVELOPMENT_JWT_PLACEHOLDER,
+        validation_alias=AliasChoices("JWT_SECRET_KEY", "SECRET_KEY"),
+    )
+    JWT_ALGORITHM: str = Field(
+        default="HS256",
+        validation_alias=AliasChoices("JWT_ALGORITHM", "ALGORITHM"),
+    )
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    SESSION_IDLE_TIMEOUT_MINUTES: int = 30
+
+    CORS_ORIGINS: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000"],
+        validation_alias=AliasChoices("CORS_ORIGINS", "ALLOWED_ORIGINS"),
+    )
+    FRONTEND_URL: str = "http://localhost:3000"
+
+    LOG_LEVEL: str = "INFO"
+    HOST: str = "127.0.0.1"
+    PORT: int = 8000
+    RELOAD: bool = True
+    RATE_LIMIT_MAX_REQUESTS: int = 120
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+    ENABLE_SECURITY_HEADERS: bool = True
+    ENABLE_RATE_LIMITING: bool = True
+    API_VERSION: str = "1.0.0"
+    API_DESCRIPTION: str = "Professional security patrol management platform"
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_debug_mode(cls, value: Any) -> Any:
+        """Accept the legacy DEBUG=release value as debug disabled."""
+        if isinstance(value, str) and value.strip().lower() in {"release", "production"}:
+            return False
+        return value
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_origins(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return []
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                parsed = [item.strip() for item in value.split(",")]
+            value = parsed
+        if isinstance(value, list):
+            return [str(item).strip().rstrip("/") for item in value if str(item).strip()]
+        return value
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("DATABASE_URL cannot be empty")
+        if value.startswith("postgres://"):
+            return "postgresql+psycopg://" + value.removeprefix("postgres://")
+        if value.startswith("postgresql://"):
+            return "postgresql+psycopg://" + value.removeprefix("postgresql://")
+        return value
+
+    @field_validator("LOG_LEVEL")
+    @classmethod
+    def normalize_log_level(cls, value: str) -> str:
+        return value.upper()
+
+    @model_validator(mode="after")
+    def validate_environment_safety(self) -> "Settings":
+        if self.APP_ENV in {"demo", "production"}:
+            if not self.DATABASE_URL.startswith("postgresql+psycopg://"):
+                raise ValueError("DATABASE_URL must use PostgreSQL when APP_ENV is demo or production")
+            if (
+                self.JWT_SECRET_KEY == DEVELOPMENT_JWT_PLACEHOLDER
+                or len(self.JWT_SECRET_KEY) < 32
+            ):
+                raise ValueError(
+                    "JWT_SECRET_KEY must be a unique secret of at least 32 characters "
+                    "when APP_ENV is demo or production"
+                )
+            if self.DEBUG:
+                raise ValueError("DEBUG must be false when APP_ENV is demo or production")
+        if "*" in self.CORS_ORIGINS:
+            raise ValueError("CORS_ORIGINS cannot contain '*' because credentials are enabled")
+        return self
+
+    @property
+    def SECRET_KEY(self) -> str:
+        """Backward-compatible alias for existing authentication code."""
+        return self.JWT_SECRET_KEY
+
+    @property
+    def ALGORITHM(self) -> str:
+        return self.JWT_ALGORITHM
+
+    @property
+    def ALLOWED_ORIGINS(self) -> list[str]:
+        return self.CORS_ORIGINS
+
+    @property
+    def API_TITLE(self) -> str:
+        return self.APP_NAME
 
     def validate_production_safety(self) -> None:
-        if not self.DEBUG and self.SECRET_KEY == "please-change-this-secret-key-for-production":
-            raise RuntimeError("SECRET_KEY must be set to a strong unique value when DEBUG=false")
-        if not self.DEBUG and any(origin == "*" for origin in self.ALLOWED_ORIGINS):
-            raise RuntimeError("ALLOWED_ORIGINS cannot contain '*' when DEBUG=false")
+        """Retained for callers; validation now occurs while settings load."""
 
 
 @lru_cache()

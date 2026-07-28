@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { lightTokens, darkTokens, spacing, radius, typography, shadows, transitions } from './theme';
+import { API_BASE_URL } from './apiConfig';
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+const API_BASE = API_BASE_URL;
 
 // ==================== THEME CONTEXT ====================
 const ThemeContext = createContext({ dark: false, toggle: () => {}, colors: lightTokens });

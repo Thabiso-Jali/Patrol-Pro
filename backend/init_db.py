@@ -1,94 +1,114 @@
 #!/usr/bin/env python3
+"""Explicit, idempotent demo-data seeding.
+
+The database schema must already exist via ``alembic upgrade head``. This
+command never runs during application startup.
 """
-Database initialization script for Patrol Pro.
-Creates all tables and optionally seeds demo data.
-"""
+
+import argparse
+import logging
+import os
 import sys
 from datetime import datetime, timedelta, timezone
-from app.database import engine, Base
-from app.models import User, Patrol, Device, Customer, Alert
+
+from sqlalchemy.orm import Session
+
+from app.config import get_settings
+from app.database import SessionLocal
+from app.models import Device, Organisation, Patrol, User
 from app.security import get_password_hash
-from sqlalchemy.orm import sessionmaker
 
-# Create all tables
-Base.metadata.create_all(bind=engine)
-print("✓ Database tables created")
+logger = logging.getLogger("patrol_pro.seed")
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-db = SessionLocal()
 
-try:
-    # Check if demo user exists
-    existing_user = db.query(User).filter(User.email == 'officer1783163143325@patrol.pro').first()
-    
-    if not existing_user:
-        # Create demo user
-        demo_user = User(
-            email='officer1783163143325@patrol.pro',
-            full_name='Demo Officer',
-            hashed_password=get_password_hash('password123'),
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Seed fake Patrol Pro demo data")
+    parser.add_argument(
+        "--confirm-demo-data",
+        action="store_true",
+        help="Explicitly allow seeding outside APP_ENV=demo",
+    )
+    return parser.parse_args()
+
+
+def require_demo_credentials() -> tuple[str, str]:
+    email = os.getenv("DEMO_ADMIN_EMAIL", "").strip()
+    password = os.getenv("DEMO_ADMIN_PASSWORD", "")
+    if not email or not password:
+        raise RuntimeError("DEMO_ADMIN_EMAIL and DEMO_ADMIN_PASSWORD are required")
+    if len(password) < 12:
+        raise RuntimeError("DEMO_ADMIN_PASSWORD must contain at least 12 characters")
+    return email, password
+
+
+def seed_demo_data(db: Session, email: str, password: str) -> None:
+    organisation = db.query(Organisation).filter(Organisation.slug == "patrol-pro-demo").first()
+    if organisation is None:
+        organisation = Organisation(
+            name="Patrol Pro Demo Company",
+            slug="patrol-pro-demo",
+            contact_email=email,
         )
-        db.add(demo_user)
-        db.commit()
-        print("✓ Demo user created: officer1783163143325@patrol.pro / password123")
-    else:
-        print("✓ Demo user already exists")
-    
-    # Check if demo patrols exist
-    existing_patrols = db.query(Patrol).count()
-    if existing_patrols == 0:
+        db.add(organisation)
+        db.flush()
+
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        db.add(
+            User(
+                email=email,
+                full_name="Demo Administrator",
+                hashed_password=get_password_hash(password),
+                role="admin",
+                organisation_id=organisation.id,
+            )
+        )
+
+    if not db.query(Patrol).filter(Patrol.organisation_id == organisation.id).first():
         now = datetime.now(timezone.utc)
-        demo_patrols = [
+        db.add(
             Patrol(
-                name='Night Shift - North Zone',
-                description='Perimeter patrol covering north sector',
+                name="Demo perimeter patrol",
+                description="Synthetic data for product demonstration only",
                 start_time=now,
                 end_time=now + timedelta(hours=8),
-                assigned_to='Officer Johnson',
-            ),
-            Patrol(
-                name='Day Shift - South Zone',
-                description='Perimeter patrol covering south sector',
-                start_time=now + timedelta(hours=8),
-                end_time=now + timedelta(hours=16),
-                assigned_to='Officer Smith',
-            ),
-        ]
-        for patrol in demo_patrols:
-            db.add(patrol)
-        db.commit()
-        print(f"✓ Created {len(demo_patrols)} demo patrols")
-    else:
-        print(f"✓ Database already contains {existing_patrols} patrols")
-    
-    # Check if demo devices exist
-    existing_devices = db.query(Device).count()
-    if existing_devices == 0:
-        demo_devices = [
-            Device(
-                name='GPS Unit A',
-                serial_number='GPS-001',
-                status='active',
-            ),
-            Device(
-                name='Radio Unit B',
-                serial_number='RADIO-001',
-                status='active',
-            ),
-        ]
-        for device in demo_devices:
-            db.add(device)
-        db.commit()
-        print(f"✓ Created {len(demo_devices)} demo devices")
-    else:
-        print(f"✓ Database already contains {existing_devices} devices")
-    
-    print("\n✅ Database initialization complete!")
-    print("\nYou can now start the backend with:")
-    print("  uvicorn app.main:app --reload --host 127.0.0.1 --port 8000")
+                assigned_to="Demo Officer",
+                organisation_id=organisation.id,
+            )
+        )
 
-except Exception as e:
-    print(f"❌ Error during initialization: {e}")
-    sys.exit(1)
-finally:
-    db.close()
+    if not db.query(Device).filter(Device.serial_number == "DEMO-GPS-001").first():
+        db.add(
+            Device(
+                name="Demo GPS unit",
+                serial_number="DEMO-GPS-001",
+                status="active",
+                organisation_id=organisation.id,
+            )
+        )
+
+    db.commit()
+
+
+def main() -> int:
+    args = parse_args()
+    settings = get_settings()
+    if settings.APP_ENV != "demo" and not args.confirm_demo_data:
+        logger.error("Set APP_ENV=demo or pass --confirm-demo-data to seed fake demo data")
+        return 2
+
+    try:
+        email, password = require_demo_credentials()
+        with SessionLocal() as db:
+            seed_demo_data(db, email, password)
+    except Exception:
+        logger.exception("Demo seeding failed")
+        return 1
+
+    logger.info("Fake demo data is ready for %s", email)
+    return 0
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    sys.exit(main())

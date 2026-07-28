@@ -9,17 +9,12 @@ from .middleware.security import RateLimitMiddleware, SecurityHeadersMiddleware
 from .api.api_v1.api import api_router
 from .api.mvp import router as mvp_router
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Initialize database
-Base.metadata.create_all(bind=engine)
-logger.info("Database initialized")
-
-# Get settings
+# Get settings before configuring process-wide behavior
 settings = get_settings()
-settings.validate_production_safety()
+
+# Configure logging
+logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL, logging.INFO))
+logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(
@@ -41,14 +36,20 @@ app.add_middleware(
 )
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
-logger.info(f"CORS configured for origins: {settings.ALLOWED_ORIGINS}")
+logger.info("CORS configured for %d origin(s)", len(settings.ALLOWED_ORIGINS))
 
 
-def apply_runtime_migrations() -> None:
+def initialize_development_database() -> None:
     """Backfill newly introduced columns for local SQLite deployments.
 
-    This keeps dev/test environments running without a full migration tool.
+    Demo and production schemas must be managed exclusively with Alembic.
     """
+    if settings.APP_ENV != "development" or not settings.DATABASE_URL.startswith("sqlite"):
+        return
+
+    Base.metadata.create_all(bind=engine)
+    logger.info("Local SQLite development database initialized")
+
     inspector = inspect(engine)
     tables = inspector.get_table_names()
 
@@ -111,10 +112,10 @@ def apply_runtime_migrations() -> None:
                 target_column = stmt.split('ADD COLUMN ')[1].split(' ')[0]
                 if target_column not in existing_columns:
                     conn.execute(text(stmt))
-        logger.info('Runtime migrations applied')
+        logger.info('Local SQLite compatibility migrations applied')
 
 
-apply_runtime_migrations()
+initialize_development_database()
 
 # Include routers
 app.include_router(api_router, prefix='/api/v1')
@@ -129,11 +130,18 @@ def root():
         'docs': '/api/docs',
     }
 
+
+@app.get('/health', include_in_schema=True)
+def health():
+    """Minimal liveness probe for the hosting platform."""
+    return {'status': 'ok', 'service': 'patrol-pro-api'}
+
+
 @app.on_event('startup')
 async def startup_event():
     """Handle application startup."""
     logger.info(f"Patrol Pro API {settings.API_VERSION} starting up...")
-    logger.info(f"Running in {'DEBUG' if settings.DEBUG else 'PRODUCTION'} mode")
+    logger.info("Application environment: %s", settings.APP_ENV)
 
 @app.on_event('shutdown')
 async def shutdown_event():

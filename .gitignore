@@ -1,5 +1,35 @@
 .DS_Store
+# Runtime environment files (examples remain versionable).
 .env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!.env.*.example
+!**/.env.example
+!**/.env.*.example
+
+# Credentials, certificates, database exports, and logs.
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.dump
+*.backup
+*.sql.gz
+*.log
+
+# Editor and temporary state.
+.idea/
+.vscode/
+*.swp
+*.swo
+*.tmp
+*.bak
+*~
+
 *.db
 *.sqlite
 *.sqlite3
@@ -32,3 +62,8 @@ php-app/.env
 php-app/public/uploads/incidents/*
 !php-app/public/uploads/incidents/.gitkeep
 php-app/deploy/*.md
+
+# Deployment documentation is intentionally tracked.
+!docs/
+docs/*
+!docs/DEPLOYMENT_DEMO.md
