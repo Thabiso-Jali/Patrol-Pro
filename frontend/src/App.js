@@ -525,6 +525,134 @@ const ActivityFeed = ({ items }) => {
   );
 };
 
+const formatDashboardTime = (value) => {
+  if (!value) return 'Not scheduled';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Not scheduled' : date.toLocaleString();
+};
+
+const formatActivityAction = (action) => (
+  action
+    .split('.')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+);
+
+export const DashboardContent = ({ stats, isLoading, error }) => {
+  const { colors } = useTheme();
+
+  if (isLoading) {
+    return (
+      <div>
+        <div style={{ marginBottom: spacing.lg }}>
+          <h1 style={{ ...typography.headingXL, margin: 0, marginBottom: spacing.md, color: colors.slate900 }}>Dashboard</h1>
+          <p role="status" style={{ ...typography.bodyLg, margin: 0, color: colors.slate500 }}>Loading dashboard statistics...</p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: spacing.lg }}>
+          {[0, 1, 2, 3].map((item) => <SkeletonCard key={item} />)}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div>
+        <h1 style={{ ...typography.headingXL, margin: 0, marginBottom: spacing.md, color: colors.slate900 }}>Dashboard</h1>
+        <Card>
+          <p role="alert" style={{ ...typography.bodyMd, margin: 0, color: colors.error }}>
+            Dashboard statistics are unavailable. Please try again.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
+  const activePatrols = stats?.active_patrol_details || [];
+  const recentActivity = stats?.recent_activity || [];
+  const todaysSchedule = stats?.todays_schedule || [];
+  const scheduleStatus = (patrol) => {
+    const now = Date.now();
+    const startsAt = patrol.start_time ? new Date(patrol.start_time).getTime() : Number.POSITIVE_INFINITY;
+    const endsAt = patrol.end_time ? new Date(patrol.end_time).getTime() : Number.POSITIVE_INFINITY;
+    if (endsAt < now) return 'Completed';
+    if (startsAt <= now) return 'In Progress';
+    return 'Scheduled';
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom: spacing.lg }}>
+        <h1 style={{ ...typography.headingXL, margin: 0, marginBottom: spacing.md, color: colors.slate900 }}>Dashboard</h1>
+        <p style={{ ...typography.bodyLg, margin: 0, color: colors.slate500 }}>
+          Welcome back! Here's what's happening with your security operations today.
+        </p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: spacing.lg, marginBottom: spacing.lg }}>
+        <KPICard title="Active Patrols" value={String(stats?.active_patrols ?? 0)} subtitle="Live patrol routes" icon="patrols" />
+        <KPICard title="Officers" value={String(stats?.officers ?? 0)} subtitle="Active officer accounts" icon="officers" />
+        <KPICard title="Open Incidents" value={String(stats?.open_incidents ?? 0)} subtitle="Needs attention" icon="incidents" />
+        <KPICard title="Pending Checkpoints" value={String(stats?.pending_checkpoints ?? 0)} subtitle="Awaiting verification" icon="checkpoints" />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: spacing.lg, marginBottom: spacing.lg }}>
+        <Card header="Active Patrols">
+          <EnterpriseTable
+            columns={[
+              { key: 'patrol', label: 'Patrol' },
+              { key: 'officer', label: 'Officer' },
+              { key: 'started', label: 'Started' },
+              { key: 'ends', label: 'Ends' },
+            ]}
+            rows={activePatrols.map((patrol) => ({
+              cells: {
+                patrol: patrol.name,
+                officer: patrol.assigned_to || 'Unassigned',
+                started: formatDashboardTime(patrol.start_time),
+                ends: patrol.end_time ? formatDashboardTime(patrol.end_time) : 'Open-ended',
+              },
+            }))}
+            pageSize={5}
+          />
+        </Card>
+        <Card header="Recent Activity">
+          {recentActivity.length > 0 ? (
+            <ActivityFeed items={recentActivity.map((item) => ({
+              icon: 'checkCircle',
+              title: formatActivityAction(item.action),
+              description: item.entity_type,
+              time: formatDashboardTime(item.created_at),
+            }))} />
+          ) : (
+            <p style={{ ...typography.bodyMd, margin: 0, color: colors.slate500 }}>No recent activity.</p>
+          )}
+        </Card>
+      </div>
+
+      <Card header="Today's Schedule">
+        <EnterpriseTable
+          columns={[
+            { key: 'time', label: 'Time' },
+            { key: 'patrol', label: 'Patrol' },
+            { key: 'officer', label: 'Officer' },
+            { key: 'status', label: 'Status' },
+          ]}
+          rows={todaysSchedule.map((patrol) => ({
+            cells: {
+              time: formatDashboardTime(patrol.start_time),
+              patrol: patrol.name,
+              officer: patrol.assigned_to || 'Unassigned',
+              status: scheduleStatus(patrol),
+            },
+          }))}
+          pageSize={10}
+        />
+      </Card>
+    </div>
+  );
+};
+
 // ==================== AUTH CONTENT COMPONENT ====================
 
 const AuthContent = ({ 
@@ -765,6 +893,9 @@ function AppInner() {
   const [token, setToken] = useState('');
   const [userRole, setUserRole] = useState('officer');
   const [notification, setNotification] = useState(null);
+  const [dashboardStats, setDashboardStats] = useState(null);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState('');
 
   // Auth state
   const [email, setEmail] = useState('');
@@ -903,6 +1034,19 @@ function AppInner() {
     }
   };
 
+  const loadDashboardStats = async () => {
+    setDashboardLoading(true);
+    setDashboardError('');
+    const result = await apiCall(`${API_BASE}/dashboard/stats`, { method: 'GET' });
+    if (result.ok) {
+      setDashboardStats(result.data);
+    } else {
+      setDashboardStats(null);
+      setDashboardError('Dashboard statistics are unavailable.');
+    }
+    setDashboardLoading(false);
+  };
+
   const handleRegister = async () => {
     if (!email || !password || !fullName) {
       notify('Please fill all fields', 'error');
@@ -954,6 +1098,7 @@ function AppInner() {
     if (result.ok) {
       notify('Patrol created successfully!');
       setPatrols([...patrols, result.data]);
+      loadDashboardStats();
       setPatrolForm({ name: '', description: '', assigned_to: '', start_time: '', end_time: '' });
       setShowPatrolModal(false);
     }
@@ -979,6 +1124,7 @@ function AppInner() {
     if (result.ok) {
       notify('Patrol updated successfully!');
       setPatrols(patrols.map((p) => p.id === editingPatrolId ? result.data : p));
+      loadDashboardStats();
       setPatrolForm({ name: '', description: '', assigned_to: '', start_time: '', end_time: '' });
       setShowEditPatrolModal(false);
       setEditingPatrolId(null);
@@ -991,6 +1137,7 @@ function AppInner() {
     if (result.ok) {
       notify('Patrol deleted successfully!');
       setPatrols(patrols.filter((p) => p.id !== patrolId));
+      loadDashboardStats();
     }
   };
 
@@ -1293,6 +1440,7 @@ function AppInner() {
     });
     if (result.ok) {
       setCommunications([result.data, ...communications]);
+      loadDashboardStats();
       setCommunicationForm({ title: '', description: '', severity: 'medium', status: 'open' });
       setShowCommunicationModal(false);
       notify('Communication logged successfully!');
@@ -1335,6 +1483,7 @@ function AppInner() {
     });
     if (result.ok) {
       setCommunications(communications.map((c) => (c.id === editingCommunicationId ? result.data : c)));
+      loadDashboardStats();
       notify('Communication updated successfully!');
       closeEditCommunication();
     }
@@ -1355,6 +1504,7 @@ function AppInner() {
     const result = await apiCall(`${API_BASE}/alerts/${removingCommunicationId}`, { method: 'DELETE' });
     if (result.ok) {
       setCommunications(communications.filter((c) => c.id !== removingCommunicationId));
+      loadDashboardStats();
       notify('Communication removed successfully!');
       closeRemoveCommunication();
     }
@@ -1448,6 +1598,7 @@ function AppInner() {
     });
     if (result.ok) {
       setManagedUsers([...managedUsers, result.data]);
+      loadDashboardStats();
       setUserForm({ email: '', full_name: '', password: '' });
       setShowUserModal(false);
       notify('User invited successfully!');
@@ -1472,6 +1623,7 @@ function AppInner() {
 
   useEffect(() => {
     if (!token) return;
+    loadDashboardStats();
     loadPatrols();
     loadVehicles();
     loadCommunications();
@@ -1610,65 +1762,6 @@ function AppInner() {
           </div>
         ) : null}
       </div>
-    </div>
-    );
-  };
-
-  // Dashboard Content
-  const DashboardContent = () => {
-    const { colors } = useTheme();
-    return (
-    <div>
-      <div style={{ marginBottom: spacing.lg }}>
-        <h1 style={{ ...typography.headingXL, margin: 0, marginBottom: spacing.md, color: colors.slate900 }}>Dashboard</h1>
-        <p style={{ ...typography.bodyLg, margin: 0, color: colors.slate500 }}>
-          Welcome back! Here's what's happening with your security operations today.
-        </p>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: spacing.lg, marginBottom: spacing.lg }}>
-        <KPICard title="Active Patrols" value={String(patrols.length || 12)} subtitle="Live patrol routes" icon="patrols" trend={{ positive: true, percent: 33 }} />
-        <KPICard title="Officers On Duty" value={String(officers.filter(o => o.status === 'On Duty').length)} subtitle="Currently active" icon="officers" trend={{ positive: true, percent: 12 }} />
-        <KPICard title="Open Incidents" value={String(incidents.filter(i => i.status === 'open').length)} subtitle="Needs attention" icon="incidents" trend={{ positive: false, percent: 50 }} />
-        <KPICard title="Active Checkpoints" value={String(checkpoints.filter(c => c.status === 'active').length)} subtitle="Perimeter secured" icon="checkpoints" trend={{ positive: true, percent: 8 }} />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: spacing.lg, marginBottom: spacing.lg }}>
-        <Card header="Active Patrols">
-          <EnterpriseTable
-            columns={[
-              { key: 'officer', label: 'Officer' },
-              { key: 'status', label: 'Status' },
-              { key: 'route', label: 'Route' },
-              { key: 'duration', label: 'Duration' },
-            ]}
-            rows={officers.map(o => ({ cells: { officer: o.name, status: o.status, route: o.zone, duration: '—' } }))}
-            pageSize={5}
-          />
-        </Card>
-        <Card header="Recent Incidents">
-          <ActivityFeed items={incidents.slice(0, 4).map(i => ({
-            icon: 'alertTriangle', title: i.title, description: i.location, time: i.status,
-          }))} />
-        </Card>
-      </div>
-
-      <Card header="Today's Schedule">
-        <EnterpriseTable
-          columns={[
-            { key: 'time', label: 'Time' },
-            { key: 'event', label: 'Event' },
-            { key: 'officer', label: 'Officer' },
-            { key: 'location', label: 'Location' },
-          ]}
-          rows={[
-            { cells: { time: '08:00', event: 'Shift Start', officer: 'Team A', location: 'HQ' } },
-            { cells: { time: '12:00', event: 'Lunch Break', officer: 'Half Team', location: 'Break Room' } },
-            { cells: { time: '16:00', event: 'Evening Patrol', officer: 'Team B', location: 'All Zones' } },
-          ]}
-          pageSize={10}
-        />
-      </Card>
     </div>
     );
   };
@@ -2342,7 +2435,7 @@ function AppInner() {
 
     switch (activeNav) {
       case 'dashboard':
-        return <DashboardContent />;
+        return <DashboardContent stats={dashboardStats} isLoading={dashboardLoading} error={dashboardError} />;
       case 'patrols':
         return (
           <PatrolsContent 

@@ -1,7 +1,7 @@
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from . import models, schemas
 
@@ -585,6 +585,104 @@ def get_operations_summary(db: Session, organisation_id: int | None = None):
         ),
         'unread_notifications': notification_query.scalar() or 0,
         'recent_activity': get_audit_logs(db, skip=0, limit=8, organisation_id=organisation_id),
+    }
+
+
+def get_dashboard_stats(db: Session, organisation_id: int):
+    """Return live dashboard data for one organisation using UTC boundaries."""
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow_start = today_start + timedelta(days=1)
+
+    def scoped_count(model, *criteria):
+        return (
+            db.query(func.count(model.id))
+            .filter(model.organisation_id == organisation_id, *criteria)
+            .scalar()
+            or 0
+        )
+
+    active_patrol_criteria = (
+        models.Patrol.is_deleted.is_(False),
+        models.Patrol.start_time.is_not(None),
+        models.Patrol.start_time <= now,
+        or_(models.Patrol.end_time.is_(None), models.Patrol.end_time >= now),
+    )
+    active_patrol_query = (
+        db.query(models.Patrol)
+        .filter(models.Patrol.organisation_id == organisation_id, *active_patrol_criteria)
+        .order_by(models.Patrol.start_time.asc(), models.Patrol.id.asc())
+    )
+    schedule_query = (
+        db.query(models.Patrol)
+        .filter(
+            models.Patrol.organisation_id == organisation_id,
+            models.Patrol.is_deleted.is_(False),
+            models.Patrol.start_time >= today_start,
+            models.Patrol.start_time < tomorrow_start,
+        )
+        .order_by(models.Patrol.start_time.asc(), models.Patrol.id.asc())
+    )
+    activity_query = (
+        db.query(models.AuditLog)
+        .join(models.User, models.User.id == models.AuditLog.actor_user_id)
+        .filter(
+            models.User.organisation_id == organisation_id,
+            models.User.is_deleted.is_(False),
+            ~models.AuditLog.action.like('auth.%'),
+        )
+        .order_by(models.AuditLog.created_at.desc())
+        .limit(8)
+    )
+
+    def patrol_payload(patrol):
+        return {
+            'id': patrol.id,
+            'name': patrol.name,
+            'assigned_to': patrol.assigned_to,
+            'start_time': patrol.start_time,
+            'end_time': patrol.end_time,
+        }
+
+    pending_checkpoints = scoped_count(
+        models.Checkpoint,
+        models.Checkpoint.is_deleted.is_(False),
+        models.Checkpoint.status == 'pending',
+    )
+    completed_checkpoints = scoped_count(
+        models.Checkpoint,
+        models.Checkpoint.is_deleted.is_(False),
+        models.Checkpoint.status == 'verified',
+    )
+    checkpoint_total = pending_checkpoints + completed_checkpoints
+
+    return {
+        'active_patrols': scoped_count(models.Patrol, *active_patrol_criteria),
+        'officers': scoped_count(
+            models.User,
+            models.User.is_deleted.is_(False),
+            models.User.role == schemas.UserRole.officer.value,
+        ),
+        'open_incidents': scoped_count(
+            models.Alert,
+            models.Alert.is_deleted.is_(False),
+            models.Alert.status.in_(['open', 'investigating', 'pending']),
+        ),
+        'pending_checkpoints': pending_checkpoints,
+        'completed_checkpoints': completed_checkpoints,
+        'checkpoint_completion_rate': (
+            round((completed_checkpoints / checkpoint_total) * 100) if checkpoint_total else 0
+        ),
+        'recent_activity': [
+            {
+                'action': event.action,
+                'entity_type': event.entity_type,
+                'created_at': event.created_at,
+            }
+            for event in activity_query.all()
+        ],
+        'active_patrol_details': [patrol_payload(patrol) for patrol in active_patrol_query.limit(25).all()],
+        'todays_schedule': [patrol_payload(patrol) for patrol in schedule_query.limit(50).all()],
     }
 
 

@@ -267,6 +267,32 @@ class OperationsSummary(BaseModel):
     recent_activity: list[AuditLog]
 
 
+class DashboardActivity(BaseModel):
+    action: str
+    entity_type: str
+    created_at: datetime
+
+
+class DashboardPatrol(BaseModel):
+    id: int
+    name: str
+    assigned_to: str | None = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+
+
+class DashboardStats(BaseModel):
+    active_patrols: int
+    officers: int
+    open_incidents: int
+    pending_checkpoints: int
+    completed_checkpoints: int
+    checkpoint_completion_rate: int
+    recent_activity: list[DashboardActivity]
+    active_patrol_details: list[DashboardPatrol]
+    todays_schedule: list[DashboardPatrol]
+
+
 class AnalyticsReport(BaseModel):
     active_patrols: int
     completed_patrols: int
