@@ -13,8 +13,10 @@ RUN pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 COPY --chown=app:app app ./app
 COPY --chown=app:app alembic ./alembic
 COPY --chown=app:app alembic.ini .
+COPY --chown=app:app start.sh /app/start.sh
+RUN chmod 755 /app/start.sh
 
 USER app
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port \"${PORT:-8000}\" --proxy-headers --forwarded-allow-ips='*'"]
+CMD ["/app/start.sh"]
