@@ -14,7 +14,7 @@ from ....services.audit import log_audit_event
 
 router = APIRouter()
 settings = get_settings()
-INVITABLE_ROLES = {'administrator', 'manager', 'supervisor', 'employee', 'read_only'}
+INVITABLE_ROLES = {'administrator', 'manager', 'supervisor', 'officer', 'employee', 'read_only'}
 
 
 def get_db():

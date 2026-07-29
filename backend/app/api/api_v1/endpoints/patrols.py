@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from ....security import get_current_user, require_roles
+from ....permissions import Permission
+from ....security import require_permissions
 from ....services.audit import log_audit_event
 
 router = APIRouter()
@@ -24,7 +25,7 @@ def list_patrols(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.PATROLS_VIEW)),
 ):
     """List all patrols with pagination."""
     return crud.get_patrols(db=db, skip=skip, limit=limit, organisation_id=current_user.organisation_id)
@@ -34,7 +35,7 @@ def list_patrols(
 def get_patrol(
     patrol_id: int,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.PATROLS_VIEW)),
 ):
     """Get a specific patrol by ID."""
     patrol = crud.get_patrol(db=db, patrol_id=patrol_id, organisation_id=current_user.organisation_id)
@@ -47,7 +48,7 @@ def get_patrol(
 def create_patrol(
     patrol: schemas.PatrolCreate,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.PATROLS_MANAGE)),
 ):
     """Create a new patrol."""
     created = crud.create_patrol(
@@ -72,7 +73,7 @@ def update_patrol(
     patrol_id: int,
     patrol_update: schemas.PatrolCreate,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.PATROLS_MANAGE)),
 ):
     """Update an existing patrol."""
     db_patrol = crud.get_patrol(db=db, patrol_id=patrol_id, organisation_id=current_user.organisation_id)
@@ -100,7 +101,7 @@ def update_patrol(
 def delete_patrol(
     patrol_id: int,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.PATROLS_MANAGE)),
 ):
     """Delete a patrol."""
     db_patrol = crud.get_patrol(db=db, patrol_id=patrol_id, organisation_id=current_user.organisation_id)

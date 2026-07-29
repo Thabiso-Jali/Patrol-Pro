@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from ....security import get_current_user, require_roles
+from ....permissions import Permission
+from ....security import require_permissions
 from ....services.audit import log_audit_event
 
 router = APIRouter()
@@ -22,7 +23,7 @@ def list_devices(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.DEVICES_VIEW)),
 ):
     """List all devices with pagination."""
     return crud.get_devices(db=db, skip=skip, limit=limit, organisation_id=current_user.organisation_id)
@@ -32,7 +33,7 @@ def list_devices(
 def get_device(
     device_id: int,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.DEVICES_VIEW)),
 ):
     """Get a specific device by ID."""
     device = crud.get_device(db=db, device_id=device_id, organisation_id=current_user.organisation_id)
@@ -45,7 +46,7 @@ def get_device(
 def create_device(
     device: schemas.DeviceCreate,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.DEVICES_MANAGE)),
 ):
     """Create a new device."""
     created = crud.create_device(
@@ -70,7 +71,7 @@ def update_device(
     device_id: int,
     device_update: schemas.DeviceCreate,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.DEVICES_MANAGE)),
 ):
     """Update an existing device."""
     db_device = crud.get_device(db=db, device_id=device_id, organisation_id=current_user.organisation_id)
@@ -98,7 +99,7 @@ def update_device(
 def delete_device(
     device_id: int,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.DEVICES_MANAGE)),
 ):
     """Delete a device."""
     db_device = crud.get_device(db=db, device_id=device_id, organisation_id=current_user.organisation_id)

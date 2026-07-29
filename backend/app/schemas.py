@@ -8,7 +8,6 @@ class UserRole(str, Enum):
     company_owner = 'company_owner'
     administrator = 'administrator'
     manager = 'manager'
-    admin = 'admin'
     supervisor = 'supervisor'
     employee = 'employee'
     officer = 'officer'
@@ -83,6 +82,13 @@ class Company(BaseModel):
 class RegistrationResult(BaseModel):
     company: Company
     owner: User
+
+
+class AuthContext(BaseModel):
+    user: User
+    company: Company
+    role: UserRole
+    permissions: list[str]
 
 
 class Token(BaseModel):

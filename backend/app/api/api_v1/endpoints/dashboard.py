@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from ....security import get_current_user
+from ....permissions import Permission
+from ....security import require_permissions
 
 router = APIRouter()
 
@@ -19,7 +20,7 @@ def get_db():
 @router.get('/stats', response_model=schemas.DashboardStats)
 def get_dashboard_stats(
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.DASHBOARD_VIEW)),
 ):
     if current_user.organisation_id is None:
         raise HTTPException(status_code=403, detail='Organisation membership is required')

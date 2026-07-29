@@ -17,6 +17,7 @@ from ....security import (
     get_password_hash,
 )
 from ....services.audit import log_audit_event
+from ....permissions import canonical_role, permission_values_for_role
 
 router = APIRouter()
 settings = get_settings()
@@ -174,3 +175,20 @@ def logout(
         commit=False,
     )
     db.commit()
+
+
+@router.get('/me', response_model=schemas.AuthContext)
+def authentication_context(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    company = db.query(models.Organisation).filter(
+        models.Organisation.id == current_user.organisation_id,
+        models.Organisation.is_active.is_(True),
+    ).one()
+    return {
+        'user': current_user,
+        'company': company,
+        'role': canonical_role(current_user.role),
+        'permissions': permission_values_for_role(current_user.role),
+    }

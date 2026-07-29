@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from ....security import get_current_user, require_roles
+from ....permissions import Permission
+from ....security import require_permissions
 from ....services.audit import log_audit_event
 
 router = APIRouter()
@@ -22,7 +23,7 @@ def list_customers(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.CUSTOMERS_VIEW)),
 ):
     """List all customers with pagination."""
     return crud.get_customers(db=db, skip=skip, limit=limit, organisation_id=current_user.organisation_id)
@@ -32,7 +33,7 @@ def list_customers(
 def get_customer(
     customer_id: int,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.CUSTOMERS_VIEW)),
 ):
     """Get a specific customer by ID."""
     customer = crud.get_customer(db=db, customer_id=customer_id, organisation_id=current_user.organisation_id)
@@ -45,7 +46,7 @@ def get_customer(
 def create_customer(
     customer: schemas.CustomerCreate,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.CUSTOMERS_MANAGE)),
 ):
     """Create a new customer."""
     created = crud.create_customer(
@@ -70,7 +71,7 @@ def update_customer(
     customer_id: int,
     customer_update: schemas.CustomerCreate,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.CUSTOMERS_MANAGE)),
 ):
     """Update an existing customer."""
     db_customer = crud.get_customer(db=db, customer_id=customer_id, organisation_id=current_user.organisation_id)
@@ -98,7 +99,7 @@ def update_customer(
 def delete_customer(
     customer_id: int,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.CUSTOMERS_MANAGE)),
 ):
     """Delete a customer."""
     db_customer = crud.get_customer(db=db, customer_id=customer_id, organisation_id=current_user.organisation_id)

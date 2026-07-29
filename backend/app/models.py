@@ -49,6 +49,7 @@ class User(Base, AuditMixin):
     full_name = Column(String, nullable=True)
     hashed_password = Column(String, nullable=False)
     role = Column(String, nullable=False, default='officer', index=True)
+    role_migrated_from_admin = Column(Boolean, nullable=False, default=False)
     organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
     session_version = Column(Integer, nullable=False, default=1)

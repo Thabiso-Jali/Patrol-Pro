@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from ....security import require_roles
+from ....permissions import Permission
+from ....security import require_permissions
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ def list_audit_logs(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.AUDIT_READ)),
 ):
     return crud.get_audit_logs(
         db=db,

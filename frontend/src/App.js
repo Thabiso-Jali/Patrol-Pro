@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { lightTokens, darkTokens, spacing, radius, typography, shadows, transitions } from './theme';
 import { API_BASE_URL } from './apiConfig';
+import { canAccessPage, visibleNavigation } from './rbac';
 
 const API_BASE = API_BASE_URL;
 
@@ -813,7 +814,7 @@ const AuthContent = ({
 
       {authTab === 'login' ? (
         <>
-          <TextField label="Email" value={email} onChange={setEmail} placeholder="admin@security.com" autoFocus={true} />
+          <TextField label="Email" value={email} onChange={setEmail} placeholder="owner@security.com" autoFocus={true} />
           <TextField label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" />
           <Button onClick={handleLogin} fullWidth>Sign In</Button>
         </>
@@ -1010,7 +1011,7 @@ function AppInner() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [token, setToken] = useState('');
-  const [userRole, setUserRole] = useState('officer');
+  const [authContext, setAuthContext] = useState(null);
   const [notification, setNotification] = useState(null);
   const [dashboardStats, setDashboardStats] = useState(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
@@ -1108,22 +1109,18 @@ function AppInner() {
 
   const headers = token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
 
-  const parseRoleFromToken = (jwtToken) => {
-    try {
-      const payloadBase64 = jwtToken.split('.')[1];
-      const payload = JSON.parse(atob(payloadBase64));
-      return payload?.role || 'officer';
-    } catch {
-      return 'officer';
-    }
-  };
-
   const apiCall = async (url, opts) => {
     try {
       const finalHeaders = { ...headers, ...opts.headers };
       const response = await fetch(url, { ...opts, headers: finalHeaders });
-      const data = await response.json();
+      const responseText = await response.text();
+      const data = responseText ? JSON.parse(responseText) : null;
       if (!response.ok) {
+        if (response.status === 401 && token) {
+          setToken('');
+          setAuthContext(null);
+          setMobileNavOpen(false);
+        }
         let message = 'API Error';
         if (typeof data?.detail === 'string') {
           message = data.detail;
@@ -1193,8 +1190,14 @@ function AppInner() {
       body: form.toString(),
     });
     if (result.ok) {
-      setToken(result.data.access_token);
-      setUserRole(parseRoleFromToken(result.data.access_token));
+      const accessToken = result.data.access_token;
+      const contextResult = await apiCall(`${API_BASE}/auth/me`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+      });
+      if (!contextResult.ok) return;
+      setAuthContext(contextResult.data);
+      setToken(accessToken);
       notify('Logged in successfully!');
       setEmail('');
       setPassword('');
@@ -1737,51 +1740,43 @@ function AppInner() {
   };
 
   useEffect(() => {
-    if (!token) return;
-    loadDashboardStats();
-    loadPatrols();
-    loadVehicles();
-    loadCommunications();
-    loadDocuments();
-  }, [token]);
+    if (!token || !authContext) return;
+    if (canAccessPage('dashboard', authContext.permissions)) loadDashboardStats();
+    if (canAccessPage('patrols', authContext.permissions)) loadPatrols();
+    if (canAccessPage('vehicles', authContext.permissions)) loadVehicles();
+    if (canAccessPage('communications', authContext.permissions)) loadCommunications();
+    if (canAccessPage('documents', authContext.permissions)) loadDocuments();
+  }, [token, authContext]);
 
-  // Navigation items
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', minRole: 'officer' },
-    { id: 'patrols', label: 'Patrols', icon: 'patrols', minRole: 'officer' },
-    { id: 'officers', label: 'Officers', icon: 'officers', minRole: 'supervisor' },
-    { id: 'incidents', label: 'Incidents', icon: 'incidents', minRole: 'officer' },
-    { id: 'checkpoints', label: 'Checkpoints', icon: 'checkpoints', minRole: 'officer' },
-    { id: 'reports', label: 'Reports', icon: 'reports', minRole: 'supervisor' },
-    { id: 'analytics', label: 'Analytics', icon: 'analytics', minRole: 'supervisor' },
-    { id: 'vehicles', label: 'Vehicles', icon: 'vehicles', minRole: 'supervisor' },
-    { id: 'communications', label: 'Communications', icon: 'communications', minRole: 'officer' },
-    { id: 'documents', label: 'Documents', icon: 'documents', minRole: 'supervisor' },
-    { id: 'users', label: 'Users', icon: 'users', minRole: 'admin' },
-    { id: 'settings', label: 'Settings', icon: 'settings', minRole: 'admin' },
-  ];
-
-  const roleLevels = { officer: 1, supervisor: 2, admin: 3 };
-  const visibleNavItems = navItems.filter((item) => roleLevels[userRole] >= roleLevels[item.minRole]);
+  const permissions = useMemo(() => authContext?.permissions || [], [authContext]);
+  const visibleNavItems = useMemo(() => visibleNavigation(permissions), [permissions]);
+  const isAuthenticated = Boolean(token && authContext);
   const activePageLabel = visibleNavItems.find((item) => item.id === activeNav)?.label || 'PatrolPro';
   const closeMobileNav = useCallback(() => {
     setMobileNavOpen(false);
     window.requestAnimationFrame(() => mobileMenuButtonRef.current?.focus());
   }, []);
-  const handleLogout = () => {
-    setToken('');
-    setUserRole('officer');
-    setMobileNavOpen(false);
-    notify('Logged out');
+  const handleLogout = async () => {
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+    } finally {
+      setToken('');
+      setAuthContext(null);
+      setMobileNavOpen(false);
+      notify('Logged out');
+    }
   };
 
   useEffect(() => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     const activeExists = visibleNavItems.some((item) => item.id === activeNav);
     if (!activeExists && visibleNavItems.length > 0) {
       setActiveNav(visibleNavItems[0].id);
     }
-  }, [token, userRole, activeNav]);
+  }, [isAuthenticated, activeNav, visibleNavItems]);
 
   useEffect(() => {
     const desktopQuery = window.matchMedia('(min-width: 1024px)');
@@ -1835,7 +1830,7 @@ function AppInner() {
         ))}
       </nav>
       <div style={{ paddingTop: spacing.lg, borderTop: `1px solid ${colors.border}` }}>
-        {token && (
+        {isAuthenticated && (
           <button onClick={handleLogout} style={{
             width: '100%', padding: spacing.md, background: 'transparent', border: 'none',
             color: colors.sidebarText, borderRadius: radius.md, cursor: 'pointer',
@@ -1907,7 +1902,9 @@ function AppInner() {
             </div>
             <div className="pp-account-copy">
               <p style={{ ...typography.bodyMd, margin: 0, fontWeight: 600, color: colors.slate900 }}>{email.split('@')[0]}</p>
-              <p style={{ ...typography.bodySm, margin: 0, color: colors.slate500, textTransform: 'capitalize' }}>{userRole}</p>
+              <p style={{ ...typography.bodySm, margin: 0, color: colors.slate500, textTransform: 'capitalize' }}>
+                {authContext?.role?.replaceAll('_', ' ')}
+              </p>
             </div>
           </div>
         ) : null}
@@ -2564,6 +2561,25 @@ function AppInner() {
       />
     );
 
+    if (!authContext) {
+      return (
+        <Card>
+          <p style={{ ...typography.bodyMd, color: colors.slate500 }}>Loading account permissions...</p>
+        </Card>
+      );
+    }
+
+    if (!canAccessPage(activeNav, permissions)) {
+      return (
+        <Card>
+          <h1 style={{ ...typography.headingLg, color: colors.slate900 }}>Access denied</h1>
+          <p style={{ ...typography.bodyMd, color: colors.slate500 }}>
+            Your account does not have permission to view this page.
+          </p>
+        </Card>
+      );
+    }
+
     switch (activeNav) {
       case 'dashboard':
         return <DashboardContent stats={dashboardStats} isLoading={dashboardLoading} error={dashboardError} />;
@@ -2629,8 +2645,8 @@ function AppInner() {
       fontFamily: '"Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif',
       color: colors.slate900,
     }}>
-      {token && <Sidebar />}
-      {token && (
+      {isAuthenticated && <Sidebar />}
+      {isAuthenticated && (
         <MobileNavigation
           open={mobileNavOpen}
           items={visibleNavItems}
@@ -2647,7 +2663,7 @@ function AppInner() {
         flexDirection: 'column',
         overflow: 'hidden',
       }}>
-        {token && <TopNav darkMode={dark} toggleDark={toggle} />}
+        {isAuthenticated && <TopNav darkMode={dark} toggleDark={toggle} />}
 
         <main className="pp-main" style={{
           flex: 1,

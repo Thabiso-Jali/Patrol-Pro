@@ -70,6 +70,7 @@ def initialize_development_database() -> None:
         ],
         'users': [
             "ALTER TABLE users ADD COLUMN role VARCHAR DEFAULT 'officer'",
+            'ALTER TABLE users ADD COLUMN role_migrated_from_admin BOOLEAN DEFAULT 0',
             "ALTER TABLE users ADD COLUMN created_at DATETIME",
             "ALTER TABLE users ADD COLUMN updated_at DATETIME",
             "ALTER TABLE users ADD COLUMN created_by INTEGER",

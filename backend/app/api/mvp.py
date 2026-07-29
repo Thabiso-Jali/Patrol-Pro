@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from .. import crud, models, schemas
 from ..config import get_settings
 from ..database import SessionLocal
-from ..security import authenticate_user, create_access_token, create_refresh_token, get_current_user, get_password_hash
+from ..permissions import Permission
+from ..security import authenticate_user, create_access_token, create_refresh_token, get_current_user, require_permissions
 from ..services.audit import log_audit_event
 
 router = APIRouter()
@@ -23,20 +24,6 @@ def get_db():
 
 def user_response(user) -> schemas.MVPUser:
     return schemas.MVPUser(id=user.id, name=user.full_name, email=user.email, role=user.role)
-
-
-def normalize_role(role: str) -> str:
-    value = role.strip().lower()
-    aliases = {
-        'guard': schemas.UserRole.officer.value,
-        'staff': schemas.UserRole.officer.value,
-        'officer': schemas.UserRole.officer.value,
-        'supervisor': schemas.UserRole.supervisor.value,
-        'admin': schemas.UserRole.admin.value,
-    }
-    if value not in aliases:
-        raise HTTPException(status_code=422, detail='Unsupported role')
-    return aliases[value]
 
 
 @router.post('/register', response_model=schemas.MVPUser)
@@ -87,7 +74,7 @@ def get_user(current_user=Depends(get_current_user)):
 def create_patrol_log(
     payload: schemas.PatrolLogCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permissions(Permission.OPERATIONS_WRITE)),
 ):
     created = crud.create_patrol_log(
         db=db,
@@ -111,7 +98,7 @@ def list_patrol_logs(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permissions(Permission.OPERATIONS_READ)),
 ):
     return crud.get_patrol_logs(
         db=db,
@@ -125,7 +112,7 @@ def list_patrol_logs(
 def create_incident(
     payload: schemas.IncidentCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permissions(Permission.INCIDENTS_CREATE)),
 ):
     created = crud.create_incident(
         db=db,
@@ -149,7 +136,7 @@ def list_incidents(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permissions(Permission.INCIDENTS_VIEW)),
 ):
     return crud.get_incidents(
         db=db,

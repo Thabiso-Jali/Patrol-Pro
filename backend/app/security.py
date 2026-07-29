@@ -12,7 +12,7 @@ from . import models
 from .config import get_settings
 from .database import SessionLocal
 from .permissions import Permission, canonical_role, has_permissions
-from .schemas import TokenData, UserRole
+from .schemas import TokenData
 
 settings = get_settings()
 
@@ -170,25 +170,6 @@ def decode_refresh_token(refresh_token: str) -> TokenData:
         )
     except JWTError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid refresh token') from exc
-
-
-def require_roles(*allowed_roles: UserRole) -> Callable:
-    allowed = {canonical_role(role.value) for role in allowed_roles}
-
-    def dependency(current_user=Depends(get_current_user)):
-        current_role = canonical_role(current_user.role)
-        if current_role == 'company_owner':
-            return current_user
-        if current_role == 'administrator' and 'administrator' not in allowed:
-            if 'supervisor' in allowed:
-                return current_user
-        if current_role == 'manager' and 'supervisor' in allowed:
-            return current_user
-        if current_role not in allowed:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Insufficient permissions')
-        return current_user
-
-    return dependency
 
 
 def require_permissions(*permissions: Permission) -> Callable:

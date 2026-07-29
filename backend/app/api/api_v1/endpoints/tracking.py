@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from ....security import get_current_user, require_roles
+from ....permissions import Permission
+from ....security import require_permissions
 from ....services.audit import log_audit_event
 
 router = APIRouter()
@@ -21,7 +22,7 @@ def get_db():
 def create_location_ping(
     location: schemas.OfficerLocationCreate,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.OPERATIONS_WRITE)),
 ):
     if location.patrol_id and not crud.get_patrol(db, location.patrol_id, current_user.organisation_id):
         raise HTTPException(status_code=400, detail='Patrol does not exist for this organisation')
@@ -46,7 +47,7 @@ def create_location_ping(
 def list_latest_locations(
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.TRACKING_VIEW)),
 ):
     return crud.get_latest_officer_locations(
         db=db,

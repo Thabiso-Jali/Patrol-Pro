@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from ....security import get_current_user, require_roles
+from ....permissions import Permission
+from ....security import require_permissions
 from ....services.audit import log_audit_event
 
 router = APIRouter()
@@ -27,7 +28,7 @@ def list_checkpoints(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.CHECKPOINTS_VIEW)),
 ):
     return crud.get_checkpoints(
         db=db,
@@ -41,7 +42,7 @@ def list_checkpoints(
 def create_checkpoint(
     checkpoint: schemas.CheckpointCreate,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.CHECKPOINTS_MANAGE)),
 ):
     validate_patrol(db, checkpoint.patrol_id, current_user.organisation_id)
     created = crud.create_checkpoint(
@@ -66,7 +67,7 @@ def verify_checkpoint(
     checkpoint_id: int,
     payload: schemas.CheckpointVerify,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.CHECKPOINTS_VERIFY)),
 ):
     checkpoint = crud.get_checkpoint(db, checkpoint_id, current_user.organisation_id)
     if not checkpoint:

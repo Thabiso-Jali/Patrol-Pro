@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
@@ -26,6 +27,10 @@ def register_company(prefix: str):
 
 def test_company_owner_invites_employee_and_token_is_single_use():
     registration, headers = register_company('Invitation')
+    owner_context = client.get('/api/v1/auth/me', headers=headers)
+    assert owner_context.status_code == 200
+    assert owner_context.json()['role'] == 'company_owner'
+    assert 'company.manage' in owner_context.json()['permissions']
     invitation = client.post('/api/v1/invitations', headers=headers, json={
         'full_name': 'Invited Employee',
         'email': f"employee+{uuid.uuid4().hex}@example.com",
@@ -44,6 +49,33 @@ def test_company_owner_invites_employee_and_token_is_single_use():
         'password': 'EmployeePass123!',
     })
     assert reused.status_code == 400
+
+    employee_tokens = client.post('/api/v1/auth/token', data={
+        'username': invitation.json()['email'],
+        'password': 'EmployeePass123!',
+    })
+    employee_headers = {'Authorization': f"Bearer {employee_tokens.json()['access_token']}"}
+    employee_context = client.get('/api/v1/auth/me', headers=employee_headers)
+    assert employee_context.status_code == 200
+    assert employee_context.json()['role'] == 'employee'
+    assert 'patrols.view' in employee_context.json()['permissions']
+    assert 'users.view' not in employee_context.json()['permissions']
+    assert client.get('/api/v1/audit-logs/', headers=employee_headers).status_code == 403
+    assert client.post('/api/v1/patrols/', headers=employee_headers, json={
+        'name': 'Unauthorized patrol administration',
+        'assigned_to': 'Invited Employee',
+    }).status_code == 403
+    incident = client.post('/api/v1/alerts/', headers=employee_headers, json={
+        'title': 'Employee reported incident',
+        'severity': 'medium',
+        'status': 'open',
+        'reported_at': datetime.now(timezone.utc).isoformat(),
+    })
+    assert incident.status_code == 200
+    assert client.delete(
+        f"/api/v1/alerts/{incident.json()['id']}",
+        headers=employee_headers,
+    ).status_code == 403
 
 
 def test_logout_revokes_access_and_refresh_tokens():

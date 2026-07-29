@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from ....security import require_roles
+from ....permissions import Permission
+from ....security import require_permissions
 
 router = APIRouter()
 
@@ -19,6 +20,6 @@ def get_db():
 @router.get('/analytics', response_model=schemas.AnalyticsReport)
 def get_analytics_report(
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.REPORTS_READ)),
 ):
     return crud.get_analytics_report(db=db, organisation_id=current_user.organisation_id)

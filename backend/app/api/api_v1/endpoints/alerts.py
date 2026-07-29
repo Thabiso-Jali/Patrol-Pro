@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from ....security import get_current_user, require_roles
+from ....permissions import Permission
+from ....security import require_permissions
 from ....services.audit import log_audit_event
 
 router = APIRouter()
@@ -31,7 +32,7 @@ def list_alerts(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.INCIDENTS_VIEW)),
 ):
     """List all alerts with pagination."""
     return crud.get_alerts(db=db, skip=skip, limit=limit, organisation_id=current_user.organisation_id)
@@ -41,7 +42,7 @@ def list_alerts(
 def get_alert(
     alert_id: int,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.INCIDENTS_VIEW)),
 ):
     """Get a specific alert by ID."""
     alert = crud.get_alert(db=db, alert_id=alert_id, organisation_id=current_user.organisation_id)
@@ -54,7 +55,7 @@ def get_alert(
 def create_alert(
     alert: schemas.AlertCreate,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.INCIDENTS_CREATE)),
 ):
     """Create a new alert."""
     validate_alert_references(db, alert, current_user.organisation_id)
@@ -91,7 +92,7 @@ def update_alert(
     alert_id: int,
     alert_update: schemas.AlertCreate,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.INCIDENTS_MANAGE)),
 ):
     """Update an existing alert."""
     db_alert = crud.get_alert(db=db, alert_id=alert_id, organisation_id=current_user.organisation_id)
@@ -120,7 +121,7 @@ def update_alert(
 def delete_alert(
     alert_id: int,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin, schemas.UserRole.supervisor)),
+    current_user: schemas.User = Depends(require_permissions(Permission.INCIDENTS_MANAGE)),
 ):
     """Delete an alert."""
     db_alert = crud.get_alert(db=db, alert_id=alert_id, organisation_id=current_user.organisation_id)

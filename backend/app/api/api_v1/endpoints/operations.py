@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from ....security import get_current_user
+from ....permissions import Permission
+from ....security import require_permissions
 
 router = APIRouter()
 
@@ -19,6 +20,6 @@ def get_db():
 @router.get('/summary', response_model=schemas.OperationsSummary)
 def get_operations_summary(
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user),
+    current_user: schemas.User = Depends(require_permissions(Permission.DASHBOARD_VIEW)),
 ):
     return crud.get_operations_summary(db=db, organisation_id=current_user.organisation_id)
