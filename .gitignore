@@ -67,3 +67,4 @@ php-app/deploy/*.md
 !docs/
 docs/*
 !docs/DEPLOYMENT_DEMO.md
+!docs/ENTERPRISE_READINESS.md
