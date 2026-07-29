@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     SESSION_IDLE_TIMEOUT_MINUTES: int = 30
+    ACCOUNT_LOCK_MAX_FAILURES: int = 5
+    ACCOUNT_LOCK_MINUTES: int = 15
+    EMPLOYEE_INVITATION_EXPIRE_HOURS: int = 72
 
     CORS_ORIGINS: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000"],

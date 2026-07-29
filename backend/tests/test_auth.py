@@ -11,15 +11,17 @@ def test_register_and_token_flow():
     register_payload = {
         'email': email,
         'full_name': 'Test User',
-        'password': 'testpass123',
+        'password': 'testpass123!',
     }
 
     response = client.post('/api/v1/auth/register', json=register_payload)
     assert response.status_code == 200
     data = response.json()
-    assert data['email'] == register_payload['email']
-    assert data['full_name'] == register_payload['full_name']
-    assert 'id' in data
+    assert data['owner']['email'] == register_payload['email']
+    assert data['owner']['role'] == 'company_owner'
+    assert data['company']['name'] == 'Test User Security'
+    assert data['owner']['full_name'] == register_payload['full_name']
+    assert 'id' in data['owner']
 
     token_payload = {
         'username': register_payload['email'],

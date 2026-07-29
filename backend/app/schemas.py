@@ -1,13 +1,18 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 class UserRole(str, Enum):
+    company_owner = 'company_owner'
+    administrator = 'administrator'
+    manager = 'manager'
     admin = 'admin'
     supervisor = 'supervisor'
+    employee = 'employee'
     officer = 'officer'
+    read_only = 'read_only'
 
 
 class UserBase(BaseModel):
@@ -29,6 +34,57 @@ class User(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CompanyRegistration(BaseModel):
+    company_name: str = Field(min_length=2, max_length=160)
+    business_email: EmailStr
+    owner_name: str = Field(min_length=2, max_length=120)
+    owner_email: EmailStr
+    password: str = Field(min_length=12, max_length=128)
+    registration_number: str | None = Field(default=None, max_length=120)
+    vat_number: str | None = Field(default=None, max_length=120)
+    tax_number: str | None = Field(default=None, max_length=120)
+    address: str | None = Field(default=None, max_length=500)
+    country: str | None = Field(default=None, max_length=120)
+    timezone: str = Field(default='UTC', min_length=1, max_length=80)
+    industry: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=64)
+    subscription_plan: str = Field(default='pilot', min_length=2, max_length=64)
+
+    @model_validator(mode='before')
+    @classmethod
+    def support_previous_company_signup_fields(cls, values):
+        """Keep existing clients working while treating every signup as a company signup."""
+        if not isinstance(values, dict):
+            return values
+        mapped = dict(values)
+        owner_email = mapped.get('owner_email') or mapped.get('email')
+        owner_name = mapped.get('owner_name') or mapped.get('full_name')
+        company_name = mapped.get('company_name') or mapped.get('organisation_name')
+        if not company_name and owner_name:
+            company_name = f'{owner_name} Security'
+        mapped.setdefault('owner_email', owner_email)
+        mapped.setdefault('business_email', owner_email)
+        mapped.setdefault('owner_name', owner_name)
+        mapped.setdefault('company_name', company_name)
+        return mapped
+
+
+class Company(BaseModel):
+    id: int
+    name: str
+    slug: str
+    business_email: EmailStr | None = None
+    timezone: str
+    subscription_plan: str
+    status: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RegistrationResult(BaseModel):
+    company: Company
+    owner: User
+
+
 class Token(BaseModel):
     access_token: str
     refresh_token: str
@@ -39,10 +95,34 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: str | None = None
     role: UserRole | None = None
+    user_id: int | None = None
+    company_id: int | None = None
+    permission_version: int | None = None
+    session_version: int | None = None
 
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+
+class EmployeeInvitationCreate(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    role: UserRole
+
+
+class EmployeeInvitationCreated(BaseModel):
+    id: int
+    email: EmailStr
+    full_name: str
+    role: UserRole
+    expires_at: datetime
+    invitation_token: str
+
+
+class EmployeeInvitationAccept(BaseModel):
+    token: str = Field(min_length=32, max_length=512)
+    password: str = Field(min_length=12, max_length=128)
 
 
 class MVPLoginRequest(BaseModel):

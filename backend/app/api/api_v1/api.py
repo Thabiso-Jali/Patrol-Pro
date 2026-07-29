@@ -8,6 +8,7 @@ from .endpoints import (
     dashboard,
     devices,
     health,
+    invitations,
     notifications,
     operations,
     patrols,
@@ -31,3 +32,4 @@ api_router.include_router(audit_logs.router, prefix='/audit-logs', tags=['audit-
 api_router.include_router(operations.router, prefix='/operations', tags=['operations'])
 api_router.include_router(reports.router, prefix='/reports', tags=['reports'])
 api_router.include_router(auth.router, prefix='/auth', tags=['auth'])
+api_router.include_router(invitations.router, prefix='/invitations', tags=['invitations'])

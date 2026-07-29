@@ -54,6 +54,20 @@ def initialize_development_database() -> None:
     tables = inspector.get_table_names()
 
     migration_map = {
+        'organisations': [
+            'ALTER TABLE organisations ADD COLUMN business_email VARCHAR',
+            'ALTER TABLE organisations ADD COLUMN registration_number VARCHAR',
+            'ALTER TABLE organisations ADD COLUMN vat_number VARCHAR',
+            'ALTER TABLE organisations ADD COLUMN tax_number VARCHAR',
+            'ALTER TABLE organisations ADD COLUMN address TEXT',
+            'ALTER TABLE organisations ADD COLUMN country VARCHAR',
+            "ALTER TABLE organisations ADD COLUMN timezone VARCHAR DEFAULT 'UTC'",
+            'ALTER TABLE organisations ADD COLUMN industry VARCHAR',
+            'ALTER TABLE organisations ADD COLUMN phone VARCHAR',
+            "ALTER TABLE organisations ADD COLUMN subscription_plan VARCHAR DEFAULT 'pilot'",
+            'ALTER TABLE organisations ADD COLUMN permission_version INTEGER DEFAULT 1',
+            "ALTER TABLE organisations ADD COLUMN status VARCHAR DEFAULT 'active'",
+        ],
         'users': [
             "ALTER TABLE users ADD COLUMN role VARCHAR DEFAULT 'officer'",
             "ALTER TABLE users ADD COLUMN created_at DATETIME",
@@ -62,6 +76,12 @@ def initialize_development_database() -> None:
             "ALTER TABLE users ADD COLUMN updated_by INTEGER",
             "ALTER TABLE users ADD COLUMN is_deleted BOOLEAN DEFAULT 0",
             "ALTER TABLE users ADD COLUMN organisation_id INTEGER",
+            'ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT 1',
+            'ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1',
+            'ALTER TABLE users ADD COLUMN permission_version INTEGER DEFAULT 1',
+            'ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0',
+            'ALTER TABLE users ADD COLUMN locked_until DATETIME',
+            'ALTER TABLE users ADD COLUMN last_login_at DATETIME',
         ],
         'patrols': [
             'ALTER TABLE patrols ADD COLUMN created_at DATETIME',
@@ -100,6 +120,9 @@ def initialize_development_database() -> None:
             'ALTER TABLE alerts ADD COLUMN updated_by INTEGER',
             'ALTER TABLE alerts ADD COLUMN is_deleted BOOLEAN DEFAULT 0',
             'ALTER TABLE alerts ADD COLUMN organisation_id INTEGER',
+        ],
+        'audit_logs': [
+            'ALTER TABLE audit_logs ADD COLUMN organisation_id INTEGER',
         ],
     }
 

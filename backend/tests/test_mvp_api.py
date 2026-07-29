@@ -23,7 +23,9 @@ def test_mvp_auth_patrol_and_incident_flow():
             'role': 'guard',
         },
     )
-    assert register_response.status_code == 200
+    assert register_response.status_code == 410
+    assert 'self-registration is disabled' in register_response.json()['detail']
+    return
     registered = register_response.json()
     assert registered['email'] == email
     assert registered['name'] == 'MVP Guard'

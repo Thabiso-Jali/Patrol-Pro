@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from .... import crud, schemas
+from .... import schemas
 from ....database import SessionLocal
-from ....security import get_password_hash, require_roles
-from ....services.audit import log_audit_event
+from ....security import require_roles
 
 router = APIRouter()
 
@@ -22,25 +21,7 @@ def create_user(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(require_roles(schemas.UserRole.admin)),
 ):
-    db_user = crud.get_user_by_email(db, email=user.email)
-    if db_user:
-        raise HTTPException(status_code=400, detail='Email already registered')
-    hashed_password = get_password_hash(user.password)
-    created = crud.create_user(
-        db=db,
-        email=user.email,
-        full_name=user.full_name,
-        hashed_password=hashed_password,
-        role=user.role.value,
-        created_by=current_user.id,
-        organisation_id=current_user.organisation_id,
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail='Direct employee creation is disabled; use the invitations endpoint',
     )
-    log_audit_event(
-        db,
-        actor_user_id=current_user.id,
-        actor_email=current_user.email,
-        action='user.create',
-        entity_type='user',
-        entity_id=str(created.id),
-    )
-    return created

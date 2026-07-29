@@ -67,7 +67,13 @@ def test_empty_organisation_receives_zeros_and_empty_operational_data():
         "pending_checkpoints": 0,
         "completed_checkpoints": 0,
         "checkpoint_completion_rate": 0,
-        "recent_activity": [],
+        "recent_activity": [
+            {
+                "action": "company.register",
+                "entity_type": "organisation",
+                "created_at": response.json()["recent_activity"][0]["created_at"],
+            }
+        ],
         "active_patrol_details": [],
         "todays_schedule": [],
     }
@@ -79,17 +85,25 @@ def test_dashboard_counts_are_live_and_organisation_scoped():
     first_patrol = create_active_patrol(first_headers, "First organisation patrol")
     create_active_patrol(second_headers, "Second organisation patrol")
 
-    officer_response = client.post(
-        "/api/v1/users/",
+    officer_email = f"officer+{uuid.uuid4().hex}@example.com"
+    invitation_response = client.post(
+        "/api/v1/invitations",
         json={
-            "email": f"officer+{uuid.uuid4().hex}@example.com",
+            "email": officer_email,
             "full_name": "Dashboard Officer",
-            "password": "TestPass123!",
-            "role": "officer",
+            "role": "employee",
         },
         headers=first_headers,
     )
-    assert officer_response.status_code == 200
+    assert invitation_response.status_code == 201
+    officer_response = client.post(
+        "/api/v1/invitations/accept",
+        json={
+            "token": invitation_response.json()["invitation_token"],
+            "password": "TestPass123!",
+        },
+    )
+    assert officer_response.status_code == 201
 
     alert_response = client.post(
         "/api/v1/alerts/",

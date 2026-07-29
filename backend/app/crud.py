@@ -1,5 +1,6 @@
 import re
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -11,7 +12,12 @@ def _slugify(value: str) -> str:
     return slug or 'organisation'
 
 
-def create_organisation(db: Session, name: str, contact_email: str | None = None):
+def create_organisation(
+    db: Session,
+    name: str,
+    contact_email: str | None = None,
+    **company_fields,
+):
     base_slug = _slugify(name)
     slug = base_slug
     suffix = 2
@@ -19,15 +25,22 @@ def create_organisation(db: Session, name: str, contact_email: str | None = None
         slug = f'{base_slug}-{suffix}'
         suffix += 1
 
-    organisation = models.Organisation(name=name, slug=slug, contact_email=contact_email)
+    organisation = models.Organisation(
+        name=name,
+        slug=slug,
+        contact_email=contact_email,
+        **company_fields,
+    )
     db.add(organisation)
     db.flush()
     return organisation
 
 
 def _tenant_filter(query, model, organisation_id: int | None):
-    if organisation_id is None or not hasattr(model, 'organisation_id'):
+    if not hasattr(model, 'organisation_id'):
         return query
+    if organisation_id is None:
+        raise ValueError(f'organisation_id is required for tenant model {model.__name__}')
     return query.filter(model.organisation_id == organisation_id)
 
 
@@ -43,7 +56,10 @@ def create_user(
     role: str = 'officer',
     created_by: int | None = None,
     organisation_id: int | None = None,
+    commit: bool = True,
 ):
+    if organisation_id is None:
+        raise ValueError('organisation_id is required')
     db_user = models.User(
         email=email,
         full_name=full_name,
@@ -54,8 +70,11 @@ def create_user(
         organisation_id=organisation_id,
     )
     db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+    if commit:
+        db.commit()
+        db.refresh(db_user)
+    else:
+        db.flush()
     return db_user
 
 
@@ -536,10 +555,9 @@ def mark_notification_read(
 
 
 def get_audit_logs(db: Session, skip: int = 0, limit: int = 100, organisation_id: int | None = None):
-    query = db.query(models.AuditLog)
-    if organisation_id is not None:
-        user_ids = db.query(models.User.id).filter(models.User.organisation_id == organisation_id)
-        query = query.filter(models.AuditLog.actor_user_id.in_(user_ids))
+    if organisation_id is None:
+        raise ValueError('organisation_id is required')
+    query = db.query(models.AuditLog).filter(models.AuditLog.organisation_id == organisation_id)
     return (
         query
         .order_by(models.AuditLog.created_at.desc())
@@ -589,9 +607,11 @@ def get_operations_summary(db: Session, organisation_id: int | None = None):
 
 
 def get_dashboard_stats(db: Session, organisation_id: int):
-    """Return live dashboard data for one organisation using UTC boundaries."""
+    """Return live dashboard data for one organisation using its configured timezone."""
+    company = db.query(models.Organisation).filter(models.Organisation.id == organisation_id).one()
     now = datetime.now(timezone.utc)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    company_now = now.astimezone(ZoneInfo(company.timezone))
+    today_start = company_now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
     tomorrow_start = today_start + timedelta(days=1)
 
     def scoped_count(model, *criteria):
@@ -625,10 +645,8 @@ def get_dashboard_stats(db: Session, organisation_id: int):
     )
     activity_query = (
         db.query(models.AuditLog)
-        .join(models.User, models.User.id == models.AuditLog.actor_user_id)
         .filter(
-            models.User.organisation_id == organisation_id,
-            models.User.is_deleted.is_(False),
+            models.AuditLog.organisation_id == organisation_id,
             ~models.AuditLog.action.like('auth.%'),
         )
         .order_by(models.AuditLog.created_at.desc())
@@ -661,7 +679,11 @@ def get_dashboard_stats(db: Session, organisation_id: int):
         'officers': scoped_count(
             models.User,
             models.User.is_deleted.is_(False),
-            models.User.role == schemas.UserRole.officer.value,
+            models.User.is_active.is_(True),
+            models.User.role.in_([
+                schemas.UserRole.officer.value,
+                schemas.UserRole.employee.value,
+            ]),
         ),
         'open_incidents': scoped_count(
             models.Alert,

@@ -1,4 +1,5 @@
 from datetime import timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -12,6 +13,7 @@ from ....security import (
     create_access_token,
     create_refresh_token,
     decode_refresh_token,
+    get_current_user,
     get_password_hash,
 )
 from ....services.audit import log_audit_event
@@ -42,14 +44,14 @@ def login_for_access_token(
             headers={'WWW-Authenticate': 'Bearer'},
         )
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={'sub': user.email, 'role': user.role}, expires_delta=access_token_expires
-    )
-    refresh_token = create_refresh_token(data={'sub': user.email, 'role': user.role})
+    company = db.query(models.Organisation).filter(models.Organisation.id == user.organisation_id).one()
+    access_token = create_access_token(user, company, expires_delta=access_token_expires)
+    refresh_token = create_refresh_token(user, company)
     log_audit_event(
         db,
         actor_user_id=user.id,
         actor_email=user.email,
+        organisation_id=user.organisation_id,
         action='auth.login',
         entity_type='user',
         entity_id=str(user.id),
@@ -64,10 +66,28 @@ def login_for_access_token(
 
 
 @router.post('/refresh', response_model=schemas.Token)
-def refresh_access_token(payload: schemas.RefreshTokenRequest):
+def refresh_access_token(payload: schemas.RefreshTokenRequest, db: Session = Depends(get_db)):
     token_data = decode_refresh_token(payload.refresh_token)
-    access_token = create_access_token(data={'sub': token_data.email, 'role': token_data.role})
-    refresh_token = create_refresh_token(data={'sub': token_data.email, 'role': token_data.role})
+    user = db.query(models.User).filter(
+        models.User.id == token_data.user_id,
+        models.User.organisation_id == token_data.company_id,
+        models.User.is_active.is_(True),
+        models.User.is_deleted.is_(False),
+    ).first()
+    company = db.query(models.Organisation).filter(
+        models.Organisation.id == token_data.company_id,
+        models.Organisation.is_active.is_(True),
+        models.Organisation.status == 'active',
+    ).first()
+    if (
+        user is None
+        or company is None
+        or user.session_version != token_data.session_version
+        or max(user.permission_version, company.permission_version) != token_data.permission_version
+    ):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid refresh token')
+    access_token = create_access_token(user, company)
+    refresh_token = create_refresh_token(user, company)
     return {
         'access_token': access_token,
         'refresh_token': refresh_token,
@@ -76,36 +96,81 @@ def refresh_access_token(payload: schemas.RefreshTokenRequest):
     }
 
 
-@router.post('/register', response_model=schemas.User)
-def register_user(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = crud.get_user_by_email(db, email=user.email)
+@router.post('/register', response_model=schemas.RegistrationResult)
+def register_company(request: Request, registration: schemas.CompanyRegistration, db: Session = Depends(get_db)):
+    db_user = crud.get_user_by_email(db, email=registration.owner_email)
     if db_user:
         raise HTTPException(status_code=400, detail='Email already registered')
+    try:
+        ZoneInfo(registration.timezone)
+    except ZoneInfoNotFoundError as exc:
+        raise HTTPException(status_code=422, detail='Unknown company timezone') from exc
+    try:
+        organisation = crud.create_organisation(
+            db,
+            name=registration.company_name,
+            contact_email=str(registration.business_email),
+            business_email=str(registration.business_email),
+            registration_number=registration.registration_number,
+            vat_number=registration.vat_number,
+            tax_number=registration.tax_number,
+            address=registration.address,
+            country=registration.country,
+            timezone=registration.timezone,
+            industry=registration.industry,
+            phone=registration.phone,
+            subscription_plan=registration.subscription_plan,
+        )
+        owner = crud.create_user(
+            db=db,
+            email=str(registration.owner_email),
+            full_name=registration.owner_name,
+            hashed_password=get_password_hash(registration.password),
+            role=schemas.UserRole.company_owner.value,
+            organisation_id=organisation.id,
+            commit=False,
+        )
+        log_audit_event(
+            db,
+            actor_user_id=owner.id,
+            actor_email=owner.email,
+            organisation_id=organisation.id,
+            action='company.register',
+            entity_type='organisation',
+            entity_id=str(organisation.id),
+            ip_address=request.client.host if request.client else None,
+            detail='company owner created',
+            commit=False,
+        )
+        db.commit()
+        db.refresh(organisation)
+        db.refresh(owner)
+    except Exception:
+        db.rollback()
+        raise
+    return {'company': organisation, 'owner': owner}
 
-    existing_user_count = db.query(models.User).filter(models.User.is_deleted.is_(False)).count()
-    assigned_role = schemas.UserRole.admin.value if existing_user_count == 0 else user.role.value
-    organisation_name = user.organisation_name or (
-        f"{user.full_name}'s Security Team" if user.full_name else user.email.split('@')[0]
-    )
-    organisation = crud.create_organisation(db, name=organisation_name, contact_email=user.email)
 
-    hashed_password = get_password_hash(user.password)
-    created = crud.create_user(
-        db=db,
-        email=user.email,
-        full_name=user.full_name,
-        hashed_password=hashed_password,
-        role=assigned_role,
-        organisation_id=organisation.id,
-    )
+@router.post('/logout', status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    request: Request,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(models.User).filter(
+        models.User.id == current_user.id,
+        models.User.organisation_id == current_user.organisation_id,
+    ).one()
+    user.session_version += 1
     log_audit_event(
         db,
-        actor_user_id=created.id,
-        actor_email=created.email,
-        action='auth.register',
+        actor_user_id=user.id,
+        actor_email=user.email,
+        organisation_id=user.organisation_id,
+        action='auth.logout',
         entity_type='user',
-        entity_id=str(created.id),
+        entity_id=str(user.id),
         ip_address=request.client.host if request.client else None,
-        detail=f'role={assigned_role}',
+        commit=False,
     )
-    return created
+    db.commit()

@@ -41,30 +41,10 @@ def normalize_role(role: str) -> str:
 
 @router.post('/register', response_model=schemas.MVPUser)
 def register_user(request: Request, payload: schemas.MVPRegisterRequest, db: Session = Depends(get_db)):
-    if crud.get_user_by_email(db, email=payload.email):
-        raise HTTPException(status_code=400, detail='Email already registered')
-
-    existing_user_count = db.query(models.User).filter(models.User.is_deleted.is_(False)).count()
-    role = schemas.UserRole.admin.value if existing_user_count == 0 else normalize_role(payload.role)
-    organisation = crud.create_organisation(db, name=f"{payload.name} Security", contact_email=payload.email)
-    user = crud.create_user(
-        db=db,
-        email=payload.email,
-        full_name=payload.name,
-        hashed_password=get_password_hash(payload.password),
-        role=role,
-        organisation_id=organisation.id,
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail='Employee self-registration is disabled; use company registration or an invitation',
     )
-    log_audit_event(
-        db,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        action='auth.register',
-        entity_type='user',
-        entity_id=str(user.id),
-        ip_address=request.client.host if request.client else None,
-    )
-    return user_response(user)
 
 
 @router.post('/login', response_model=schemas.Token)
@@ -77,15 +57,14 @@ def login_user(request: Request, payload: schemas.MVPLoginRequest, db: Session =
             headers={'WWW-Authenticate': 'Bearer'},
         )
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={'sub': user.email, 'role': user.role},
-        expires_delta=access_token_expires,
-    )
-    refresh_token = create_refresh_token(data={'sub': user.email, 'role': user.role})
+    company = db.query(models.Organisation).filter(models.Organisation.id == user.organisation_id).one()
+    access_token = create_access_token(user, company, expires_delta=access_token_expires)
+    refresh_token = create_refresh_token(user, company)
     log_audit_event(
         db,
         actor_user_id=user.id,
         actor_email=user.email,
+        organisation_id=user.organisation_id,
         action='auth.login',
         entity_type='user',
         entity_id=str(user.id),
