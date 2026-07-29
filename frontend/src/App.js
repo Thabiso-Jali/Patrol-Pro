@@ -780,6 +780,7 @@ const AuthContent = ({
   email, setEmail, 
   password, setPassword, 
   fullName, setFullName, 
+  companyName, setCompanyName,
   handleLogin, handleRegister 
 }) => {
   const { colors } = useTheme();
@@ -818,7 +819,8 @@ const AuthContent = ({
         </>
       ) : (
         <>
-          <TextField label="Full Name" value={fullName} onChange={setFullName} placeholder="John Doe" autoFocus={true} />
+          <TextField label="Company Name" value={companyName} onChange={setCompanyName} placeholder="Acme Security Ltd" autoFocus={true} />
+          <TextField label="Owner Name" value={fullName} onChange={setFullName} placeholder="John Doe" />
           <TextField label="Email" value={email} onChange={setEmail} placeholder="john@security.com" />
           <TextField label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" />
           <Button onClick={handleRegister} fullWidth>Create Account</Button>
@@ -1018,6 +1020,7 @@ function AppInner() {
   // Auth state
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [password, setPassword] = useState('');
   const [authTab, setAuthTab] = useState('login');
 
@@ -1029,11 +1032,7 @@ function AppInner() {
   const [editingPatrolId, setEditingPatrolId] = useState(null);
 
   // Officers
-  const [officers, setOfficers] = useState([
-    { id: 1, name: 'James Wilson', badge: 'P-001', status: 'On Duty', zone: 'Zone A' },
-    { id: 2, name: 'Sarah Chen', badge: 'P-002', status: 'On Duty', zone: 'Zone B' },
-    { id: 3, name: 'Marcus Johnson', badge: 'P-003', status: 'Break', zone: 'Zone C' },
-  ]);
+  const [officers, setOfficers] = useState([]);
   const [officerForm, setOfficerForm] = useState({ name: '', badge: '', status: '', zone: '' });
   const [showEditOfficerModal, setShowEditOfficerModal] = useState(false);
   const [editingOfficerId, setEditingOfficerId] = useState(null);
@@ -1041,10 +1040,7 @@ function AppInner() {
   const [removingOfficerId, setRemovingOfficerId] = useState(null);
 
   // Incidents
-  const [incidents, setIncidents] = useState([
-    { id: 1, title: 'Door Forced Open', location: 'Warehouse C', severity: 'high', status: 'open', time: new Date() },
-    { id: 2, title: 'Motion Detected', location: 'Parking Area B', severity: 'medium', status: 'investigating', time: new Date() },
-  ]);
+  const [incidents, setIncidents] = useState([]);
   const [incidentForm, setIncidentForm] = useState({ title: '', location: '', severity: '', status: '' });
   const [showEditIncidentModal, setShowEditIncidentModal] = useState(false);
   const [editingIncidentId, setEditingIncidentId] = useState(null);
@@ -1052,11 +1048,7 @@ function AppInner() {
   const [removingIncidentId, setRemovingIncidentId] = useState(null);
 
   // Checkpoints
-  const [checkpoints, setCheckpoints] = useState([
-    { id: 1, name: 'Main Gate', zone: 'North Perimeter', status: 'active', lastCheck: new Date() },
-    { id: 2, name: 'Side Entrance', zone: 'East Perimeter', status: 'active', lastCheck: new Date() },
-    { id: 3, name: 'Warehouse Door', zone: 'South Perimeter', status: 'inactive', lastCheck: new Date() },
-  ]);
+  const [checkpoints, setCheckpoints] = useState([]);
   const [checkpointForm, setCheckpointForm] = useState({ name: '', zone: '', status: '', lastCheck: '' });
   const [showEditCheckpointModal, setShowEditCheckpointModal] = useState(false);
   const [editingCheckpointId, setEditingCheckpointId] = useState(null);
@@ -1067,9 +1059,7 @@ function AppInner() {
   const [users, setUsers] = useState([]);
 
   // Reports
-  const [reports, setReports] = useState([
-    { id: 1, title: 'Daily Security Summary', range: 'Last 24 hours', generated_at: new Date(), status: 'ready' },
-  ]);
+  const [reports, setReports] = useState([]);
 
   // Vehicles (backed by devices API)
   const [vehicles, setVehicles] = useState([]);
@@ -1100,12 +1090,12 @@ function AppInner() {
 
   // User management
   const [managedUsers, setManagedUsers] = useState([]);
-  const [userForm, setUserForm] = useState({ email: '', full_name: '', password: '' });
+  const [userForm, setUserForm] = useState({ email: '', full_name: '', role: 'employee' });
   const [showUserModal, setShowUserModal] = useState(false);
 
   // Settings
   const [settingsForm, setSettingsForm] = useState({
-    companyName: 'Patrol Pro Security',
+    companyName: '',
     defaultShiftLength: '8',
     incidentEscalationMinutes: '15',
     emailNotifications: 'enabled',
@@ -1166,14 +1156,20 @@ function AppInner() {
   };
 
   const handleRegister = async () => {
-    if (!email || !password || !fullName) {
+    if (!email || !password || !fullName || !companyName) {
       notify('Please fill all fields', 'error');
       return;
     }
     const result = await apiCall(`${API_BASE}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, full_name: fullName, password }),
+      body: JSON.stringify({
+        company_name: companyName,
+        business_email: email,
+        owner_name: fullName,
+        owner_email: email,
+        password,
+      }),
     });
     if (result.ok) {
       notify('Registration successful! Please login.');
@@ -1181,6 +1177,7 @@ function AppInner() {
       setEmail('');
       setPassword('');
       setFullName('');
+      setCompanyName('');
     }
   };
 
@@ -1706,20 +1703,20 @@ function AppInner() {
   };
 
   const handleInviteUser = async () => {
-    if (!userForm.email || !userForm.password) {
-      notify('Email and password are required', 'error');
+    if (!userForm.email || !userForm.full_name) {
+      notify('Name and email are required', 'error');
       return;
     }
-    const result = await apiCall(`${API_BASE}/users/`, {
+    const result = await apiCall(`${API_BASE}/invitations`, {
       method: 'POST',
       body: JSON.stringify(userForm),
     });
     if (result.ok) {
       setManagedUsers([...managedUsers, result.data]);
       loadDashboardStats();
-      setUserForm({ email: '', full_name: '', password: '' });
+      setUserForm({ email: '', full_name: '', role: 'employee' });
       setShowUserModal(false);
-      notify('User invited successfully!');
+      notify(`Invitation created. Token: ${result.data.invitation_token}`);
     }
   };
 
@@ -2518,7 +2515,7 @@ function AppInner() {
       <Modal open={showUserModal} onClose={() => setShowUserModal(false)} title="Invite User">
         <TextField label="Full Name" value={userForm.full_name} onChange={(v) => setUserForm({ ...userForm, full_name: v })} placeholder="Alex Morgan" autoFocus={true} />
         <TextField label="Email" value={userForm.email} onChange={(v) => setUserForm({ ...userForm, email: v })} placeholder="alex@patrolpro.com" />
-        <TextField label="Temporary Password" type="password" value={userForm.password} onChange={(v) => setUserForm({ ...userForm, password: v })} placeholder="Temporary password" />
+        <TextField label="Role" value={userForm.role} onChange={(v) => setUserForm({ ...userForm, role: v })} placeholder="employee" />
         <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
           <Button variant="secondary" fullWidth onClick={() => setShowUserModal(false)}>Cancel</Button>
           <Button fullWidth onClick={handleInviteUser}>Invite</Button>
@@ -2560,6 +2557,8 @@ function AppInner() {
         setPassword={setPassword}
         fullName={fullName} 
         setFullName={setFullName}
+        companyName={companyName}
+        setCompanyName={setCompanyName}
         handleLogin={handleLogin} 
         handleRegister={handleRegister}
       />
