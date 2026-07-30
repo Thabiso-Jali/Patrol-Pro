@@ -13,6 +13,7 @@ const operational = [
   PERMISSIONS.PATROLS_VIEW,
   PERMISSIONS.INCIDENTS_VIEW,
   PERMISSIONS.CHECKPOINTS_VIEW,
+  PERMISSIONS.TEAMS_VIEW,
 ];
 
 test('company owner permissions reveal every navigation item', () => {
@@ -45,6 +46,7 @@ test.each(['officer', 'employee'])('%s operational permissions never produce an 
   expect(ids(operational)).toEqual([
     'dashboard',
     'patrols',
+    'my-team',
     'incidents',
     'checkpoints',
     'communications',

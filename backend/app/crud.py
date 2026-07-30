@@ -63,6 +63,7 @@ def create_user(
     db_user = models.User(
         email=email,
         full_name=full_name,
+        staff_identifier=f'PENDING-{email}',
         hashed_password=hashed_password,
         role=role,
         created_by=created_by,
@@ -70,6 +71,8 @@ def create_user(
         organisation_id=organisation_id,
     )
     db.add(db_user)
+    db.flush()
+    db_user.staff_identifier = f'PP-{db_user.id:05d}'
     if commit:
         db.commit()
         db.refresh(db_user)
@@ -93,6 +96,7 @@ def create_patrol(
     patrol: schemas.PatrolCreate,
     actor_user_id: int | None = None,
     organisation_id: int | None = None,
+    commit: bool = True,
 ):
     db_patrol = models.Patrol(
         name=patrol.name,
@@ -100,13 +104,17 @@ def create_patrol(
         start_time=patrol.start_time,
         end_time=patrol.end_time,
         assigned_to=patrol.assigned_to,
+        required_officers=patrol.required_officers,
         created_by=actor_user_id,
         updated_by=actor_user_id,
         organisation_id=organisation_id,
     )
     db.add(db_patrol)
-    db.commit()
-    db.refresh(db_patrol)
+    if commit:
+        db.commit()
+        db.refresh(db_patrol)
+    else:
+        db.flush()
     return db_patrol
 
 
@@ -116,6 +124,7 @@ def update_patrol(
     patrol_update: schemas.PatrolCreate,
     actor_user_id: int | None = None,
     organisation_id: int | None = None,
+    commit: bool = True,
 ):
     db_patrol = get_patrol(db, patrol_id, organisation_id)
     if not db_patrol:
@@ -125,9 +134,13 @@ def update_patrol(
     db_patrol.start_time = patrol_update.start_time
     db_patrol.end_time = patrol_update.end_time
     db_patrol.assigned_to = patrol_update.assigned_to
+    db_patrol.required_officers = patrol_update.required_officers
     db_patrol.updated_by = actor_user_id
-    db.commit()
-    db.refresh(db_patrol)
+    if commit:
+        db.commit()
+        db.refresh(db_patrol)
+    else:
+        db.flush()
     return db_patrol
 
 
@@ -340,12 +353,16 @@ def create_alert(
     db_alert = models.Alert(
         title=alert.title,
         description=alert.description,
+        category=alert.category,
+        location=alert.location,
+        resolution_notes=alert.resolution_notes,
         severity=alert.severity,
         status=alert.status,
         reported_at=alert.reported_at,
         patrol_id=alert.patrol_id,
         device_id=alert.device_id,
         customer_id=alert.customer_id,
+        reported_by=actor_user_id,
         created_by=actor_user_id,
         updated_by=actor_user_id,
         organisation_id=organisation_id,
@@ -368,6 +385,9 @@ def update_alert(
         return None
     db_alert.title = alert_update.title
     db_alert.description = alert_update.description
+    db_alert.category = alert_update.category
+    db_alert.location = alert_update.location
+    db_alert.resolution_notes = alert_update.resolution_notes
     db_alert.severity = alert_update.severity
     db_alert.status = alert_update.status
     db_alert.reported_at = alert_update.reported_at
@@ -430,6 +450,44 @@ def create_checkpoint(
     db.commit()
     db.refresh(db_checkpoint)
     return db_checkpoint
+
+
+def update_checkpoint(
+    db: Session,
+    checkpoint_id: int,
+    checkpoint_update: schemas.CheckpointCreate,
+    actor_user_id: int,
+    organisation_id: int,
+):
+    checkpoint = get_checkpoint(db, checkpoint_id, organisation_id)
+    if not checkpoint:
+        return None
+    checkpoint.name = checkpoint_update.name
+    checkpoint.code = checkpoint_update.code
+    checkpoint.patrol_id = checkpoint_update.patrol_id
+    checkpoint.location_label = checkpoint_update.location_label
+    checkpoint.latitude = checkpoint_update.latitude
+    checkpoint.longitude = checkpoint_update.longitude
+    checkpoint.nfc_tag = checkpoint_update.nfc_tag
+    checkpoint.status = checkpoint_update.status
+    checkpoint.updated_by = actor_user_id
+    db.commit()
+    db.refresh(checkpoint)
+    return checkpoint
+
+
+def delete_checkpoint(
+    db: Session,
+    checkpoint_id: int,
+    actor_user_id: int,
+    organisation_id: int,
+):
+    checkpoint = get_checkpoint(db, checkpoint_id, organisation_id)
+    if checkpoint:
+        checkpoint.is_deleted = True
+        checkpoint.updated_by = actor_user_id
+        db.commit()
+    return checkpoint
 
 
 def verify_checkpoint(

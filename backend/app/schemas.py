@@ -14,6 +14,30 @@ class UserRole(str, Enum):
     read_only = 'read_only'
 
 
+class IncidentSeverity(str, Enum):
+    low = 'low'
+    medium = 'medium'
+    high = 'high'
+    critical = 'critical'
+
+
+class IncidentStatus(str, Enum):
+    open = 'open'
+    investigating = 'investigating'
+    resolved = 'resolved'
+    cancelled = 'cancelled'
+
+
+class IncidentCategory(str, Enum):
+    security = 'security'
+    safety = 'safety'
+    access_control = 'access_control'
+    theft = 'theft'
+    vandalism = 'vandalism'
+    medical = 'medical'
+    other = 'other'
+
+
 class UserBase(BaseModel):
     email: EmailStr
     full_name: str | None = Field(default=None, min_length=2, max_length=120)
@@ -27,6 +51,7 @@ class UserCreate(UserBase):
 
 class User(UserBase):
     id: int
+    staff_identifier: str
     organisation_id: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -157,17 +182,74 @@ class PatrolBase(BaseModel):
     start_time: datetime | None = None
     end_time: datetime | None = None
     assigned_to: str | None = Field(default=None, max_length=120)
+    required_officers: int = Field(default=1, ge=1, le=100)
 
 
 class PatrolCreate(PatrolBase):
-    pass
+    officer_ids: list[int] = Field(default_factory=list, max_length=100)
+    team_ids: list[int] = Field(default_factory=list, max_length=20)
 
 
 class Patrol(PatrolBase):
     id: int
+    officer_ids: list[int] = Field(default_factory=list)
+    team_ids: list[int] = Field(default_factory=list)
+    assignment_names: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
+
+
+class TeamBase(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    leader_user_id: int | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+    status: str = Field(default='active', pattern='^(active|inactive|archived)$')
+
+
+class TeamCreate(TeamBase):
+    member_user_ids: list[int] = Field(default_factory=list, max_length=100)
+
+
+class TeamMemberSummary(BaseModel):
+    id: int
+    full_name: str | None
+    staff_identifier: str
+    role: UserRole
+
+
+class Team(TeamBase):
+    id: int
+    members: list[TeamMemberSummary] = Field(default_factory=list)
+    availability: str = 'available'
+    active_patrols: list[str] = Field(default_factory=list)
+    workload_count: int = 0
+    reason: str | None = None
+
+
+class OfficerAvailability(TeamMemberSummary):
+    team_id: int | None = None
+    team_name: str | None = None
+    availability_state: str
+    reason: str | None = None
+    active_deployment: str | None = None
+    workload_count: int = 0
+
+
+class AssignmentRecommendation(BaseModel):
+    team_ids: list[int] = Field(default_factory=list)
+    officer_ids: list[int] = Field(default_factory=list)
+    covered_officers: int = 0
+    required_officers: int = 0
+    explanation: str
+
+
+class AvailabilityResult(BaseModel):
+    available_officers: list[OfficerAvailability]
+    unavailable_officers: list[OfficerAvailability]
+    available_teams: list[Team]
+    unavailable_teams: list[Team]
+    recommendation: AssignmentRecommendation | None = None
 
 
 class PatrolLogCreate(BaseModel):
@@ -238,8 +320,11 @@ class Customer(CustomerBase):
 class AlertBase(BaseModel):
     title: str = Field(min_length=2, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
-    severity: str = Field(min_length=2, max_length=32)
-    status: str | None = 'open'
+    category: IncidentCategory = IncidentCategory.security
+    location: str | None = Field(default=None, max_length=240)
+    severity: IncidentSeverity
+    status: IncidentStatus = IncidentStatus.open
+    resolution_notes: str | None = Field(default=None, max_length=3000)
     reported_at: datetime
     patrol_id: int | None = None
     device_id: int | None = None
@@ -247,11 +332,17 @@ class AlertBase(BaseModel):
 
 
 class AlertCreate(AlertBase):
-    pass
+    @model_validator(mode='after')
+    def require_resolution_for_terminal_status(self):
+        if self.status in {IncidentStatus.resolved, IncidentStatus.cancelled}:
+            if not self.resolution_notes or not self.resolution_notes.strip():
+                raise ValueError('Resolution notes are required when resolving or cancelling an incident')
+        return self
 
 
 class Alert(AlertBase):
     id: int
+    reported_by: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
@@ -265,7 +356,7 @@ class CheckpointBase(BaseModel):
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     nfc_tag: str | None = Field(default=None, max_length=120)
-    status: str = Field(default='pending', min_length=2, max_length=32)
+    status: str = Field(default='pending', pattern='^(pending|verified|inactive)$')
 
 
 class CheckpointCreate(CheckpointBase):

@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, text
+from sqlalchemy import (
+    Boolean, CheckConstraint, Column, DateTime, Float, ForeignKey, Index, Integer,
+    String, Text, UniqueConstraint, text,
+)
 from .database import Base
 
 
@@ -47,6 +50,7 @@ class User(Base, AuditMixin):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=True)
+    staff_identifier = Column(String, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
     role = Column(String, nullable=False, default='officer', index=True)
     role_migrated_from_admin = Column(Boolean, nullable=False, default=False)
@@ -57,6 +61,9 @@ class User(Base, AuditMixin):
     failed_login_attempts = Column(Integer, nullable=False, default=0)
     locked_until = Column(DateTime, nullable=True, index=True)
     last_login_at = Column(DateTime, nullable=True)
+    __table_args__ = (
+        UniqueConstraint('organisation_id', 'staff_identifier', name='uq_users_org_staff_identifier'),
+    )
 
 
 class Patrol(Base, AuditMixin):
@@ -68,7 +75,58 @@ class Patrol(Base, AuditMixin):
     start_time = Column(DateTime, nullable=True)
     end_time = Column(DateTime, nullable=True)
     assigned_to = Column(String, nullable=True)
+    required_officers = Column(Integer, nullable=False, default=1)
     organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
+
+
+class Team(Base, AuditMixin):
+    __tablename__ = 'teams'
+    __table_args__ = (
+        UniqueConstraint('organisation_id', 'name', name='uq_teams_org_name'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    leader_user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
+    notes = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default='active', index=True)
+    organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
+
+
+class TeamMember(Base):
+    __tablename__ = 'team_members'
+    __table_args__ = (
+        UniqueConstraint('organisation_id', 'user_id', name='uq_team_members_org_user'),
+        UniqueConstraint('team_id', 'user_id', name='uq_team_members_team_user'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    team_id = Column(Integer, ForeignKey('teams.id'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    created_by = Column(Integer, nullable=True, index=True)
+
+
+class PatrolAssignment(Base):
+    __tablename__ = 'patrol_assignments'
+    __table_args__ = (
+        CheckConstraint(
+            '(user_id IS NOT NULL AND team_id IS NULL) OR '
+            '(user_id IS NULL AND team_id IS NOT NULL)',
+            name='ck_patrol_assignment_one_target',
+        ),
+        UniqueConstraint('patrol_id', 'user_id', name='uq_patrol_assignment_user'),
+        UniqueConstraint('patrol_id', 'team_id', name='uq_patrol_assignment_team'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    patrol_id = Column(Integer, ForeignKey('patrols.id'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
+    team_id = Column(Integer, ForeignKey('teams.id'), nullable=True, index=True)
+    organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    created_by = Column(Integer, nullable=True, index=True)
 
 
 class PatrolLog(Base):
@@ -120,17 +178,24 @@ class Alert(Base, AuditMixin):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     description = Column(String, nullable=True)
+    category = Column(String, nullable=False, default='security', index=True)
+    location = Column(String, nullable=True)
+    resolution_notes = Column(Text, nullable=True)
     severity = Column(String, nullable=False)
     status = Column(String, nullable=False, default='open')
     reported_at = Column(DateTime, nullable=False)
     patrol_id = Column(Integer, ForeignKey('patrols.id'), nullable=True)
     device_id = Column(Integer, ForeignKey('devices.id'), nullable=True)
     customer_id = Column(Integer, ForeignKey('customers.id'), nullable=True)
+    reported_by = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
     organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
 
 
 class Checkpoint(Base, AuditMixin):
     __tablename__ = 'checkpoints'
+    __table_args__ = (
+        UniqueConstraint('organisation_id', 'code', name='uq_checkpoints_org_code'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, index=True)

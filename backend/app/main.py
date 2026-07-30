@@ -83,6 +83,7 @@ def initialize_development_database() -> None:
             'ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0',
             'ALTER TABLE users ADD COLUMN locked_until DATETIME',
             'ALTER TABLE users ADD COLUMN last_login_at DATETIME',
+            'ALTER TABLE users ADD COLUMN staff_identifier VARCHAR',
         ],
         'patrols': [
             'ALTER TABLE patrols ADD COLUMN created_at DATETIME',
@@ -91,6 +92,7 @@ def initialize_development_database() -> None:
             'ALTER TABLE patrols ADD COLUMN updated_by INTEGER',
             'ALTER TABLE patrols ADD COLUMN is_deleted BOOLEAN DEFAULT 0',
             'ALTER TABLE patrols ADD COLUMN organisation_id INTEGER',
+            'ALTER TABLE patrols ADD COLUMN required_officers INTEGER DEFAULT 1',
         ],
         'patrol_logs': [
             'ALTER TABLE patrol_logs ADD COLUMN organisation_id INTEGER',
@@ -121,6 +123,10 @@ def initialize_development_database() -> None:
             'ALTER TABLE alerts ADD COLUMN updated_by INTEGER',
             'ALTER TABLE alerts ADD COLUMN is_deleted BOOLEAN DEFAULT 0',
             'ALTER TABLE alerts ADD COLUMN organisation_id INTEGER',
+            "ALTER TABLE alerts ADD COLUMN category VARCHAR DEFAULT 'security'",
+            'ALTER TABLE alerts ADD COLUMN location VARCHAR',
+            'ALTER TABLE alerts ADD COLUMN resolution_notes TEXT',
+            'ALTER TABLE alerts ADD COLUMN reported_by INTEGER',
         ],
         'audit_logs': [
             'ALTER TABLE audit_logs ADD COLUMN organisation_id INTEGER',
@@ -136,6 +142,11 @@ def initialize_development_database() -> None:
                 target_column = stmt.split('ADD COLUMN ')[1].split(' ')[0]
                 if target_column not in existing_columns:
                     conn.execute(text(stmt))
+        if 'users' in tables:
+            conn.execute(text(
+                "UPDATE users SET staff_identifier = 'PP-' || printf('%05d', id) "
+                "WHERE staff_identifier IS NULL"
+            ))
         logger.info('Local SQLite compatibility migrations applied')
 
 

@@ -98,6 +98,17 @@ def update_alert(
     db_alert = crud.get_alert(db=db, alert_id=alert_id, organisation_id=current_user.organisation_id)
     if not db_alert:
         raise HTTPException(status_code=404, detail='Alert not found')
+    allowed_transitions = {
+        'open': {'open', 'investigating', 'resolved', 'cancelled'},
+        'investigating': {'investigating', 'resolved', 'cancelled'},
+        'resolved': {'resolved'},
+        'cancelled': {'cancelled'},
+    }
+    if alert_update.status.value not in allowed_transitions.get(db_alert.status, {db_alert.status}):
+        raise HTTPException(
+            status_code=409,
+            detail=f'Incident cannot move from {db_alert.status} to {alert_update.status.value}',
+        )
     validate_alert_references(db, alert_update, current_user.organisation_id)
     updated = crud.update_alert(
         db=db,

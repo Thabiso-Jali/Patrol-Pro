@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from .... import crud, schemas
+from .... import crud, models, schemas
 from ....database import SessionLocal
 from ....permissions import Permission
 from ....security import require_permissions
@@ -21,6 +21,23 @@ def get_db():
 def validate_patrol(db: Session, patrol_id: int | None, organisation_id: int | None):
     if patrol_id and not crud.get_patrol(db, patrol_id, organisation_id):
         raise HTTPException(status_code=400, detail='Patrol does not exist for this organisation')
+
+
+def validate_code(
+    db: Session,
+    code: str,
+    organisation_id: int,
+    exclude_checkpoint_id: int | None = None,
+):
+    query = db.query(models.Checkpoint).filter(
+        models.Checkpoint.organisation_id == organisation_id,
+        models.Checkpoint.code == code,
+        models.Checkpoint.is_deleted.is_(False),
+    )
+    if exclude_checkpoint_id is not None:
+        query = query.filter(models.Checkpoint.id != exclude_checkpoint_id)
+    if query.first():
+        raise HTTPException(status_code=409, detail='Checkpoint code already exists')
 
 
 @router.get('/', response_model=list[schemas.Checkpoint])
@@ -45,6 +62,9 @@ def create_checkpoint(
     current_user: schemas.User = Depends(require_permissions(Permission.CHECKPOINTS_MANAGE)),
 ):
     validate_patrol(db, checkpoint.patrol_id, current_user.organisation_id)
+    validate_code(db, checkpoint.code, current_user.organisation_id)
+    if checkpoint.status == 'verified':
+        raise HTTPException(status_code=422, detail='Checkpoints can only be verified through verification')
     created = crud.create_checkpoint(
         db=db,
         checkpoint=checkpoint,
@@ -62,6 +82,65 @@ def create_checkpoint(
     return created
 
 
+@router.put('/{checkpoint_id}', response_model=schemas.Checkpoint)
+def update_checkpoint(
+    checkpoint_id: int,
+    payload: schemas.CheckpointCreate,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(require_permissions(Permission.CHECKPOINTS_MANAGE)),
+):
+    checkpoint = crud.get_checkpoint(db, checkpoint_id, current_user.organisation_id)
+    if not checkpoint:
+        raise HTTPException(status_code=404, detail='Checkpoint not found')
+    if checkpoint.status == 'verified':
+        raise HTTPException(status_code=409, detail='Verified checkpoints cannot be edited')
+    if payload.status == 'verified':
+        raise HTTPException(status_code=422, detail='Use checkpoint verification to mark it verified')
+    validate_patrol(db, payload.patrol_id, current_user.organisation_id)
+    validate_code(db, payload.code, current_user.organisation_id, checkpoint_id)
+    updated = crud.update_checkpoint(
+        db,
+        checkpoint_id,
+        payload,
+        current_user.id,
+        current_user.organisation_id,
+    )
+    log_audit_event(
+        db,
+        actor_user_id=current_user.id,
+        actor_email=current_user.email,
+        organisation_id=current_user.organisation_id,
+        action='checkpoint.update',
+        entity_type='checkpoint',
+        entity_id=str(checkpoint_id),
+    )
+    return updated
+
+
+@router.delete('/{checkpoint_id}', status_code=204)
+def archive_checkpoint(
+    checkpoint_id: int,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(require_permissions(Permission.CHECKPOINTS_MANAGE)),
+):
+    checkpoint = crud.get_checkpoint(db, checkpoint_id, current_user.organisation_id)
+    if not checkpoint:
+        raise HTTPException(status_code=404, detail='Checkpoint not found')
+    if checkpoint.status == 'verified':
+        raise HTTPException(status_code=409, detail='Verified checkpoints must be retained for audit')
+    crud.delete_checkpoint(db, checkpoint_id, current_user.id, current_user.organisation_id)
+    log_audit_event(
+        db,
+        actor_user_id=current_user.id,
+        actor_email=current_user.email,
+        organisation_id=current_user.organisation_id,
+        action='checkpoint.archive',
+        entity_type='checkpoint',
+        entity_id=str(checkpoint_id),
+    )
+    return None
+
+
 @router.post('/{checkpoint_id}/verify', response_model=schemas.Checkpoint)
 def verify_checkpoint(
     checkpoint_id: int,
@@ -72,6 +151,10 @@ def verify_checkpoint(
     checkpoint = crud.get_checkpoint(db, checkpoint_id, current_user.organisation_id)
     if not checkpoint:
         raise HTTPException(status_code=404, detail='Checkpoint not found')
+    if checkpoint.status == 'verified':
+        raise HTTPException(status_code=409, detail='Checkpoint is already verified')
+    if checkpoint.status == 'inactive':
+        raise HTTPException(status_code=409, detail='Inactive checkpoints cannot be verified')
     if payload.code and payload.code != checkpoint.code:
         raise HTTPException(status_code=400, detail='Checkpoint code does not match')
     if payload.nfc_tag and checkpoint.nfc_tag and payload.nfc_tag != checkpoint.nfc_tag:

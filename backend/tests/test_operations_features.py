@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
@@ -28,18 +28,29 @@ def create_user_and_headers(prefix: str = "ops"):
         data={"username": email, "password": password},
     )
     assert token_response.status_code == 200
-    return {"Authorization": f"Bearer {token_response.json()['access_token']}"}
+    headers = {"Authorization": f"Bearer {token_response.json()['access_token']}"}
+    invitation = client.post("/api/v1/invitations", headers=headers, json={
+        "email": f"ops-officer+{uuid.uuid4().hex}@example.com",
+        "full_name": "Operations Officer",
+        "role": "employee",
+    })
+    accepted = client.post("/api/v1/invitations/accept", json={
+        "token": invitation.json()["invitation_token"],
+        "password": "AssignedPass123!",
+    })
+    return headers, accepted.json()["id"]
 
 
-def create_patrol(headers):
+def create_patrol(headers, officer_id):
+    start = datetime.now(timezone.utc)
     response = client.post(
         "/api/v1/patrols/",
         json={
             "name": "Live operations patrol",
             "description": "Perimeter verification",
-            "start_time": datetime.now(timezone.utc).isoformat(),
-            "end_time": None,
-            "assigned_to": "Mobile Team",
+            "start_time": start.isoformat(),
+            "end_time": (start + timedelta(hours=8)).isoformat(),
+            "officer_ids": [officer_id],
         },
         headers=headers,
     )
@@ -48,8 +59,8 @@ def create_patrol(headers):
 
 
 def test_checkpoint_tracking_notifications_and_reports_flow():
-    headers = create_user_and_headers()
-    patrol = create_patrol(headers)
+    headers, officer_id = create_user_and_headers()
+    patrol = create_patrol(headers, officer_id)
 
     checkpoint_response = client.post(
         "/api/v1/checkpoints/",
@@ -77,6 +88,23 @@ def test_checkpoint_tracking_notifications_and_reports_flow():
     assert verify_response.status_code == 200
     assert verify_response.json()["status"] == "verified"
     assert verify_response.json()["verified_at"]
+    repeated_verify = client.post(
+        f"/api/v1/checkpoints/{checkpoint['id']}/verify",
+        json={"code": "QR-NORTH-001"},
+        headers=headers,
+    )
+    assert repeated_verify.status_code == 409
+    duplicate_code = client.post(
+        "/api/v1/checkpoints/",
+        json={
+            "name": "Duplicate North Gate",
+            "code": "QR-NORTH-001",
+            "location_label": "Other entrance",
+            "status": "pending",
+        },
+        headers=headers,
+    )
+    assert duplicate_code.status_code == 409
 
     location_response = client.post(
         "/api/v1/tracking/locations",

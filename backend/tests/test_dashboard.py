@@ -32,7 +32,7 @@ def create_user_and_headers(prefix: str):
     return {"Authorization": f"Bearer {token_response.json()['access_token']}"}
 
 
-def create_active_patrol(headers, name: str):
+def create_active_patrol(headers, name: str, officer_id: int):
     now = datetime.now(timezone.utc)
     response = client.post(
         "/api/v1/patrols/",
@@ -41,12 +41,31 @@ def create_active_patrol(headers, name: str):
             "description": "Dashboard aggregate test",
             "start_time": (now - timedelta(minutes=30)).isoformat(),
             "end_time": (now + timedelta(minutes=30)).isoformat(),
-            "assigned_to": "Dashboard Officer",
+            "officer_ids": [officer_id],
         },
         headers=headers,
     )
     assert response.status_code == 200
     return response.json()
+
+
+def create_officer(headers, name="Dashboard Officer"):
+    officer_email = f"officer+{uuid.uuid4().hex}@example.com"
+    invitation_response = client.post(
+        "/api/v1/invitations",
+        json={"email": officer_email, "full_name": name, "role": "employee"},
+        headers=headers,
+    )
+    assert invitation_response.status_code == 201
+    officer_response = client.post(
+        "/api/v1/invitations/accept",
+        json={
+            "token": invitation_response.json()["invitation_token"],
+            "password": "TestPass123!",
+        },
+    )
+    assert officer_response.status_code == 201
+    return officer_response.json(), officer_email
 
 
 def test_dashboard_requires_authentication():
@@ -82,35 +101,23 @@ def test_empty_organisation_receives_zeros_and_empty_operational_data():
 def test_dashboard_counts_are_live_and_organisation_scoped():
     first_headers = create_user_and_headers("dashboard-first")
     second_headers = create_user_and_headers("dashboard-second")
-    first_patrol = create_active_patrol(first_headers, "First organisation patrol")
-    create_active_patrol(second_headers, "Second organisation patrol")
-
-    officer_email = f"officer+{uuid.uuid4().hex}@example.com"
-    invitation_response = client.post(
-        "/api/v1/invitations",
-        json={
-            "email": officer_email,
-            "full_name": "Dashboard Officer",
-            "role": "employee",
-        },
-        headers=first_headers,
+    first_officer, officer_email = create_officer(first_headers)
+    second_officer, second_officer_email = create_officer(
+        second_headers, "Second Dashboard Officer",
     )
-    assert invitation_response.status_code == 201
-    officer_response = client.post(
-        "/api/v1/invitations/accept",
-        json={
-            "token": invitation_response.json()["invitation_token"],
-            "password": "TestPass123!",
-        },
+    first_patrol = create_active_patrol(
+        first_headers, "First organisation patrol", first_officer["id"],
     )
-    assert officer_response.status_code == 201
+    create_active_patrol(
+        second_headers, "Second organisation patrol", second_officer["id"],
+    )
 
     first_officers = client.get("/api/v1/users/officers", headers=first_headers)
     second_officers = client.get("/api/v1/users/officers", headers=second_headers)
     assert first_officers.status_code == 200
     assert [user["email"] for user in first_officers.json()] == [officer_email]
     assert second_officers.status_code == 200
-    assert second_officers.json() == []
+    assert [user["email"] for user in second_officers.json()] == [second_officer_email]
 
     alert_response = client.post(
         "/api/v1/alerts/",
@@ -171,7 +178,7 @@ def test_dashboard_counts_are_live_and_organisation_scoped():
 
     assert second_stats.status_code == 200
     assert second_stats.json()["active_patrols"] == 1
-    assert second_stats.json()["officers"] == 0
+    assert second_stats.json()["officers"] == 1
     assert second_stats.json()["open_incidents"] == 0
     assert second_stats.json()["pending_checkpoints"] == 0
     assert second_stats.json()["completed_checkpoints"] == 0

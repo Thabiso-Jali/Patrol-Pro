@@ -2,7 +2,15 @@ import React, { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 
-import App, { DashboardContent, MobileNavigation } from './App';
+import App, {
+  DashboardContent,
+  MobileNavigation,
+  SearchableMultiSelect,
+  additionalOfficerChoices,
+  getDefaultPatrolSchedule,
+  recommendedFormAssignment,
+  staffingCoverage,
+} from './App';
 
 global.IS_REACT_ACT_ENVIRONMENT = true;
 window.matchMedia = window.matchMedia || (() => ({
@@ -142,6 +150,76 @@ test('dashboard API failure shows an error without fabricated figures', () => {
   expect(html).not.toContain('vs last week');
 });
 
+const staffingAvailability = {
+  available_teams: [{
+    id: 10,
+    name: 'Team Alpha',
+    members: [
+      { id: 1, full_name: 'One', staff_identifier: 'PP-00001' },
+      { id: 2, full_name: 'Two', staff_identifier: 'PP-00002' },
+    ],
+  }],
+  unavailable_teams: [],
+  available_officers: [
+    { id: 1, full_name: 'One', staff_identifier: 'PP-00001' },
+    { id: 2, full_name: 'Two', staff_identifier: 'PP-00002' },
+    { id: 3, full_name: 'Three', staff_identifier: 'PP-00003' },
+  ],
+};
+
+test('staffing coverage counts team members and extras without duplication', () => {
+  const coverage = staffingCoverage({
+    team_ids: [10],
+    officer_ids: [2, 3],
+    required_officers: 4,
+  }, staffingAvailability);
+  expect(coverage.assigned).toBe(3);
+  expect(coverage.missing).toBe(1);
+});
+
+test('selected team members are removed from additional officer choices', () => {
+  expect(additionalOfficerChoices(staffingAvailability, [10]).map((officer) => officer.id))
+    .toEqual([3]);
+});
+
+test('one-click recommendation replaces the current structured assignment', () => {
+  expect(recommendedFormAssignment(
+    { name: 'Patrol', team_ids: [], officer_ids: [99] },
+    { team_ids: [10], officer_ids: [3] },
+  )).toEqual({ name: 'Patrol', team_ids: [10], officer_ids: [3] });
+});
+
+test('default patrol schedule starts on a practical interval and lasts eight hours', () => {
+  const schedule = getDefaultPatrolSchedule(new Date(2026, 6, 30, 10, 7, 20));
+  expect(schedule.start_time).toBe('2026-07-30T10:15');
+  expect(
+    new Date(schedule.end_time).getTime() - new Date(schedule.start_time).getTime()
+  ).toBe(8 * 60 * 60 * 1000);
+});
+
+test('searchable multi-select remains label and checkbox accessible', () => {
+  const onChange = jest.fn();
+  const view = renderInteractive(
+    <SearchableMultiSelect
+      label="Assign Available Officers"
+      options={[
+        { value: 1, label: 'Officer One · PP-00001' },
+        { value: 2, label: 'Officer Two · PP-00002' },
+      ]}
+      selected={[]}
+      onChange={onChange}
+    />
+  );
+  const search = view.container.querySelector('input[type="search"]');
+  act(() => changeInput(search, 'Two'));
+  expect(view.container.textContent).not.toContain('Officer One');
+  expect(view.container.textContent).toContain('Officer Two');
+  const checkbox = view.container.querySelector('input[type="checkbox"]');
+  act(() => checkbox.click());
+  expect(onChange).toHaveBeenCalledWith([2]);
+  view.cleanup();
+});
+
 test('mobile navigation opens and closes from its backdrop', () => {
   const view = renderInteractive(<NavigationHarness />);
   const openButton = view.container.querySelector('[aria-label="Open navigation"]');
@@ -268,6 +346,49 @@ test('officers page renders accepted operational users from the API', async () =
 
   expect(view.container.textContent).toContain('Accepted Employee');
   expect(view.container.textContent).toContain('employee@example.com');
+  view.cleanup();
+});
+
+test('employee My Team view shows safe coworker names and staff IDs', async () => {
+  global.fetch = jest.fn((url) => {
+    if (url.endsWith('/auth/token')) {
+      return Promise.resolve(jsonResponse({ access_token: 'token', refresh_token: 'refresh' }));
+    }
+    if (url.endsWith('/auth/me')) {
+      return Promise.resolve(jsonResponse({
+        user: { id: 2, email: 'employee@example.com', role: 'employee' },
+        company: { id: 1, name: 'Test Company' },
+        role: 'employee',
+        permissions: ['teams.view'],
+      }));
+    }
+    if (url.endsWith('/teams/mine')) {
+      return Promise.resolve(jsonResponse({
+        id: 1,
+        name: 'Team Alpha',
+        leader_user_id: 2,
+        status: 'active',
+        availability: 'available',
+        active_patrols: [],
+        members: [
+          { id: 2, full_name: 'Officer Smith', staff_identifier: 'PP-00002', role: 'employee' },
+          { id: 3, full_name: 'Officer Jones', staff_identifier: 'PP-00003', role: 'employee' },
+        ],
+      }));
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const view = renderInteractive(<App />);
+  await submitLogin(view);
+  await flushPromises();
+
+  const myTeamLink = Array.from(view.container.querySelectorAll('button'))
+    .find((button) => button.textContent.includes('My Team'));
+  act(() => myTeamLink.click());
+
+  expect(view.container.textContent).toContain('Team Alpha');
+  expect(view.container.textContent).toContain('Officer Jones');
+  expect(view.container.textContent).toContain('PP-00003');
   view.cleanup();
 });
 

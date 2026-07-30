@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
@@ -28,12 +28,22 @@ def create_token(prefix: str):
         data={"username": email, "password": password},
     )
     assert token_response.status_code == 200
-    return token_response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token_response.json()['access_token']}"}
+    invitation = client.post("/api/v1/invitations", headers=headers, json={
+        "email": f"{prefix}-officer+{uuid.uuid4().hex}@example.com",
+        "full_name": "Tenant Officer",
+        "role": "employee",
+    })
+    accepted = client.post("/api/v1/invitations/accept", json={
+        "token": invitation.json()["invitation_token"],
+        "password": "AssignedPass123!",
+    })
+    return token_response.json()["access_token"], accepted.json()["id"]
 
 
 def test_patrols_are_scoped_to_authenticated_organisation():
-    tenant_a_token = create_token("tenant-a")
-    tenant_b_token = create_token("tenant-b")
+    tenant_a_token, tenant_a_officer_id = create_token("tenant-a")
+    tenant_b_token, _ = create_token("tenant-b")
 
     tenant_a_headers = {"Authorization": f"Bearer {tenant_a_token}"}
     tenant_b_headers = {"Authorization": f"Bearer {tenant_b_token}"}
@@ -44,8 +54,8 @@ def test_patrols_are_scoped_to_authenticated_organisation():
             "name": "Tenant A restricted patrol",
             "description": "Should not leak to tenant B",
             "start_time": datetime.now(timezone.utc).isoformat(),
-            "end_time": None,
-            "assigned_to": "Alpha Team",
+            "end_time": (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat(),
+            "officer_ids": [tenant_a_officer_id],
         },
         headers=tenant_a_headers,
     )

@@ -26,6 +26,17 @@ class PatrolFlowTest(unittest.TestCase):
         token_response = self.client.post("/api/v1/auth/token", data=token_payload)
         self.assertEqual(token_response.status_code, 200)
         self.token = token_response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {self.token}"}
+        invitation = self.client.post("/api/v1/invitations", headers=headers, json={
+            "email": f"patrol-officer+{uuid.uuid4().hex}@example.com",
+            "full_name": "Assigned Patrol Officer",
+            "role": "employee",
+        })
+        accepted = self.client.post("/api/v1/invitations/accept", json={
+            "token": invitation.json()["invitation_token"],
+            "password": "AssignedPass123!",
+        })
+        self.officer_id = accepted.json()["id"]
 
     def test_create_and_list_patrol(self):
         patrol_payload = {
@@ -33,7 +44,7 @@ class PatrolFlowTest(unittest.TestCase):
             "description": "Check perimeter and gates",
             "start_time": datetime.now(timezone.utc).isoformat(),
             "end_time": (datetime.now(timezone.utc) + timedelta(hours=4)).isoformat(),
-            "assigned_to": "Team A",
+            "officer_ids": [self.officer_id],
         }
         headers = {"Authorization": f"Bearer {self.token}"}
 
@@ -41,7 +52,7 @@ class PatrolFlowTest(unittest.TestCase):
         self.assertEqual(create_response.status_code, 200)
         patrol = create_response.json()
         self.assertEqual(patrol["name"], patrol_payload["name"])
-        self.assertEqual(patrol["assigned_to"], patrol_payload["assigned_to"])
+        self.assertEqual(patrol["officer_ids"], [self.officer_id])
         self.assertIn("id", patrol)
 
         list_response = self.client.get("/api/v1/patrols/", headers=headers)

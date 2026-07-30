@@ -22,6 +22,7 @@ class Permission(StrEnum):
     ANALYTICS_VIEW = 'analytics.view'
     TRACKING_VIEW = 'tracking.view'
     USERS_VIEW = 'users.view'
+    TEAMS_VIEW = 'teams.view'
     COMPANY_MANAGE = 'company.manage'
     USERS_MANAGE = 'users.manage'
     USERS_INVITE = 'users.invite'
@@ -43,6 +44,7 @@ FIELD_OPERATION_PERMISSIONS = OPERATION_VIEW_PERMISSIONS | {
     Permission.INCIDENTS_CREATE,
     Permission.CHECKPOINTS_VERIFY,
     Permission.OPERATIONS_WRITE,
+    Permission.TEAMS_VIEW,
 }
 SUPERVISOR_PERMISSIONS = FIELD_OPERATION_PERMISSIONS | {
     Permission.PATROLS_MANAGE,
