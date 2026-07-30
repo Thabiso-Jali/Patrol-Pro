@@ -1,0 +1,430 @@
+# Patrol Pro Engineering Standards
+
+**Status:** Normative internal engineering contract
+**Applies to:** Product design, frontend, backend, APIs, databases, migrations, tests, security, operations, and release work
+**Audience:** Engineers, reviewers, architects, security engineers, product engineers, and release managers
+**Last reviewed:** 30 July 2026
+
+This is not user documentation. It defines the minimum standard for every new Patrol Pro feature and every material change to an existing feature.
+
+The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are requirements:
+
+- **MUST / MUST NOT**: mandatory unless an approved exception is recorded.
+- **SHOULD / SHOULD NOT**: the default; deviation requires a documented reason.
+- **MAY**: optional.
+
+When delivery pressure conflicts with these standards, the feature scope should be reduced instead of silently weakening safety, tenant isolation, data integrity, or accessibility.
+
+---
+
+## 1. Product Philosophy
+
+Patrol Pro is an enterprise security operations platform. It MUST:
+
+- prevent human error wherever practical;
+- guide users toward valid actions;
+- minimise manual typing and repeated data entry;
+- minimise clicks without hiding context or weakening safeguards;
+- expose only actions relevant to the user's role, permissions, tenant, and current workflow;
+- remain scalable for enterprise customers;
+- remain usable on mobile devices;
+- keep the backend and database as the authoritative source of truth;
+- present real system state and never disguise sample, local, or fabricated state as production data;
+- preserve an auditable operational history.
+
+Every feature MUST first ask:
+
+> How can we stop the user making a mistake?
+
+before asking:
+
+> How do we implement this?
+
+The safest valid action SHOULD be the easiest action. Impossible actions SHOULD be unavailable, predictable actions SHOULD be automated, and consequential actions SHOULD be clear and recoverable.
+
+### Product decision rules
+
+1. Prefer prevention over error messages.
+2. Prefer structured relationships over copied labels or identifiers.
+3. Prefer real-time, contextual information over requiring navigation to another screen.
+4. Prefer honest empty states over fake or illustrative production data.
+5. Prefer a complete narrow workflow over a broad workflow containing placeholders.
+6. Prefer reversible operations over permanent deletion.
+7. Prefer organisation-wide consistency over page-specific conventions.
+8. Do not imply that an action succeeded unless the authoritative backend confirms it.
+
+---
+
+## 2. UX Principles
+
+### Prefer
+
+- searchable dropdowns for selecting existing records;
+- autocomplete for large or remote datasets;
+- context-aware suggestions ranked by useful operational factors;
+- live validation before submission;
+- inline, actionable guidance beside the relevant field;
+- sensible and visible defaults;
+- disabled impossible actions with an explanation;
+- structured date, time, status, category, and relationship inputs;
+- automatic population from authenticated-user, organisation, and selected-record context;
+- clear loading, empty, success, partial, stale, and error states;
+- permission-aware navigation and controls;
+- confirmation only when an action is materially destructive or difficult to reverse;
+- undo, restore, archive, or grace-period patterns where appropriate;
+- keyboard-operable and screen-reader-compatible controls;
+- layouts that work at 320 CSS pixels without loss of function.
+
+### Avoid
+
+- free-text identifiers, names, foreign keys, or status values;
+- asking users to type IDs that the system already knows;
+- duplicate entry of data held elsewhere;
+- native browser alerts and confirmations;
+- unnecessary confirmation dialogs for safe, reversible actions;
+- validation shown only after submission;
+- controls that allow an invalid value and reject it later when prevention is possible;
+- workflows that require training to discover the next action;
+- hidden permissions or unexplained disabled controls;
+- fabricated fallback values after an API failure;
+- success notifications for browser-only state when persistence is expected;
+- colour as the only way to communicate status.
+
+### Interaction requirements
+
+- Forms MUST show field-specific validation and a clear submission summary.
+- Focus MUST move predictably when dialogs open, errors occur, and navigation changes.
+- Searchable controls MUST support keyboard selection, a visible focus state, accessible labels, and a no-results state.
+- Destructive controls MUST state the affected record and consequence.
+- Lists MUST provide filtering or search before they become operationally difficult to scan.
+- The interface MUST preserve user input after a recoverable server or network error.
+- A protected page MUST NOT render protected content before identity and permissions resolve.
+
+---
+
+## 3. Backend Principles
+
+All security and business validation MUST exist server-side. Frontend validation improves experience only and MUST NOT be treated as an enforcement boundary.
+
+The backend MUST enforce:
+
+- authentication and permission checks;
+- organisation/tenant isolation on every applicable read and write;
+- ownership of every referenced record;
+- concurrency protection for conflicting operations;
+- business invariants and allowed state transitions;
+- duplicate prevention where duplicates would create operational ambiguity;
+- active, archived, deleted, and eligibility state;
+- audit logging for security-sensitive and operationally important actions;
+- historical preservation;
+- soft deletion or archival where restoration or auditability is required;
+- input size, shape, type, and allowed-value constraints;
+- transaction atomicity between a business change and its required audit event.
+
+### Backend implementation rules
+
+- Authorisation SHOULD use one reusable permission mechanism; endpoint-specific compatibility logic MUST be temporary, documented, and tested.
+- Tenant scope SHOULD be applied in repository/service/query helpers so it cannot be accidentally omitted.
+- Mutations spanning related records MUST use a transaction.
+- Conflict-prone mutations MUST use database constraints, locking, isolation, or another reliable concurrency strategy.
+- Time MUST have an explicit timezone policy. Stored instants SHOULD be UTC and timezone-aware; organisation-local dates MUST use the organisation timezone.
+- Sensitive values MUST NOT appear in logs, errors, audit details, URLs, or normal API responses.
+- External or slow side effects SHOULD run through durable jobs with retry and idempotency.
+- Multi-instance features MUST NOT rely on process-local memory for shared state.
+- Business logic SHOULD live in focused services, not route handlers or UI components.
+
+---
+
+## 4. Database Principles
+
+- Schemas MUST be normalised unless a measured performance requirement justifies denormalisation.
+- Canonical facts MUST have one source of truth.
+- Relationships MUST use foreign keys rather than copied names or manually entered IDs.
+- Duplicate facts MUST NOT be stored in multiple domain models without explicit synchronisation ownership.
+- Historical records MUST remain readable after a related user, team, site, or organisation record is archived.
+- Deletion policy MUST be explicit per entity: hard delete, soft delete, archive, retention, and restore.
+- Database constraints MUST enforce invariants that cannot safely depend on application code alone.
+- Uniqueness MUST reflect tenant boundaries and normalisation rules, including case sensitivity.
+- Indexes MUST support tenant filters, common searches, joins, time ranges, and availability/conflict checks.
+- Date/time columns representing instants SHOULD be timezone-aware.
+- Schema changes MUST use Alembic in every persistent environment.
+- A migration MUST upgrade a fresh supported PostgreSQL database, upgrade an existing supported database, and have an intentional rollback strategy.
+- Application startup MUST NOT silently create or alter production schema.
+- Large migrations MUST account for locks, backfills, deployment ordering, and backward compatibility.
+- Schema design SHOULD allow likely enterprise expansion without embedding hypothetical fields or duplicating current data.
+
+---
+
+## 5. API Standards
+
+### Resource and route conventions
+
+- New APIs MUST use the canonical versioned `/api/v1` surface.
+- Resource names MUST be plural nouns; actions SHOULD be represented by state transitions or explicit subresources.
+- A concept MUST NOT have competing canonical endpoints or models.
+- Request and response schemas MUST be explicit and separate from ORM persistence models.
+- Create operations SHOULD return `201`; successful no-content deletion SHOULD return `204`; other status codes MUST be consistent by operation type.
+
+### Errors
+
+Errors MUST use one structured contract containing, at minimum:
+
+- a stable machine-readable error code;
+- a safe human-readable message;
+- field-level details when applicable;
+- a correlation/request identifier;
+- no secrets or internal stack details.
+
+Validation, permission, conflict, not-found, and rate-limit errors MUST be distinguishable without parsing prose.
+
+### Collections
+
+- Collection endpoints MUST use consistent pagination with metadata.
+- Filtering, sorting, and search parameter names MUST be consistent.
+- Page sizes MUST be bounded.
+- Filters MUST preserve tenant scope and permission rules.
+
+### Trust and compatibility
+
+- No endpoint may trust tenant IDs, permission claims, computed totals, eligibility, or ownership supplied by frontend state.
+- Mutation endpoints SHOULD support idempotency when retries could create duplicates.
+- Breaking API changes require a migration/deprecation plan.
+- API documentation and tests MUST reflect the active contract.
+
+---
+
+## 6. Frontend Standards
+
+- Components MUST be small enough to understand and test independently.
+- The application shell MUST NOT become a monolithic feature container.
+- Domain screens, hooks, services, state, and reusable UI controls SHOULD live in focused modules.
+- All API traffic MUST pass through a central client responsible for base URL, authentication, safe error parsing, cancellation, and token-expiry behaviour.
+- Shared controls MUST be reused for searchable selectors, tables, dialogs, validation messages, permission guards, loading states, empty states, and error states.
+- Server data SHOULD use a consistent query/cache strategy with explicit invalidation after mutations.
+- Protected routes MUST wait for authentication and permission resolution.
+- Permission-aware UI is a usability feature, not an authorisation boundary.
+- Direct URL navigation, refresh, back/forward navigation, and deep linking MUST work.
+- Locally generated records MUST NOT impersonate persisted backend records.
+- Optimistic updates MAY be used only when rollback and conflict behaviour are defined.
+- Runtime configuration MUST fail clearly when required production values are absent; it MUST NOT silently fall back to localhost in production.
+- Repeated form, table, and state-transition logic SHOULD be schema- or component-driven.
+- Mobile and keyboard behaviour MUST be covered by representative tests.
+
+---
+
+## 7. Human Error Prevention Checklist
+
+Every feature design and review MUST answer:
+
+- Can invalid data be entered?
+- Can duplicate data be entered?
+- Can an impossible action be attempted?
+- Can a concurrency conflict create an invalid outcome?
+- Can conflicts be detected earlier?
+- Can typing be reduced without removing necessary flexibility?
+- Can known data be selected instead of re-entered?
+- Can defaults help, and are they visible and safe?
+- Can recommendations help, and is their reasoning understandable?
+- Can a user accidentally act on another organisation's data?
+- Can users accidentally lose data?
+- Can destructive actions be reversed?
+- Can a retry or double-click duplicate the operation?
+- Can stale information cause the wrong decision?
+- Can an inaccessible control prevent task completion?
+- Can a user mistake a placeholder, cached value, or frontend-only value for persisted truth?
+- Is the error message placed where the user can correct the problem?
+- Does the audit trail explain who changed what and when?
+
+A feature is incomplete when a material risk is identified but neither prevented nor explicitly accepted.
+
+---
+
+## 8. Feature Design Process
+
+Before implementing a significant feature, the engineer MUST briefly document:
+
+1. **Business problem:** user, operational decision, desired outcome, and cost of error.
+2. **Two or three viable approaches:** including meaningful trade-offs.
+3. **Recommended approach:** architecture and user flow.
+4. **Why it scales:** data ownership, query shape, concurrency, extensibility, and operational support.
+5. **How it reduces mistakes:** prevention, validation, defaults, recommendations, reversibility, and visibility.
+6. **Data and permission boundaries:** authoritative records, tenant scope, roles/permissions, and sensitive fields.
+7. **Success measures:** acceptance criteria, tests, performance expectations, and observability.
+
+Implementation then follows this sequence:
+
+1. Confirm the canonical domain model and API.
+2. Define invariants, permissions, tenant scope, lifecycle, and audit events.
+3. Design the shortest safe user flow, including loading, empty, error, mobile, and accessibility states.
+4. Identify concurrency and idempotency risks.
+5. Define migration and backward-compatibility needs.
+6. Implement backend authority and database constraints.
+7. Implement the frontend using shared primitives.
+8. Test positive, negative, cross-tenant, permission, concurrency, accessibility, and failure paths.
+9. Run migration, schema-drift, build, secret, and diff checks.
+10. Review the completed workflow against this document.
+
+Exceptions MUST name the violated standard, reason, risk, owner, compensating control, and removal date.
+
+---
+
+## 9. Enterprise Readiness Checklist
+
+Before a feature is complete, verify:
+
+- [ ] permissions are least-privilege and tested by role;
+- [ ] tenant isolation is enforced and cross-tenant tests exist;
+- [ ] mobile layout and touch targets support the complete workflow;
+- [ ] keyboard and screen-reader behaviour is usable;
+- [ ] important actions and denials have suitable audit coverage;
+- [ ] the API follows route, schema, error, pagination, and status conventions;
+- [ ] relationships, constraints, indexes, deletion, history, and migrations preserve database integrity;
+- [ ] unit, integration, permission, tenant, failure, and regression tests pass;
+- [ ] queries avoid unbounded reads and known N+1 patterns;
+- [ ] concurrent and retried mutations remain correct;
+- [ ] logs, metrics, correlation IDs, and alerts make failures diagnosable;
+- [ ] the design can support expected enterprise volume and likely extensions;
+- [ ] no placeholder behaviour is presented as complete;
+- [ ] no secrets, credentials, personal data, or care-sensitive data are exposed;
+- [ ] documentation and operational runbooks reflect the final behaviour.
+
+---
+
+# Current Codebase Technical Debt Roadmap
+
+## Review scope and method
+
+This is a static architecture review of the current repository, including the FastAPI backend, SQLAlchemy/Alembic schema, React frontend, tests, Docker/Render configuration, legacy PHP/mobile/prototype directories, and the current uncommitted Patrol Pro work. It is a standards-gap assessment, not a claim that every listed risk is currently exploitable.
+
+Effort assumes one engineer familiar with the repository and includes implementation, tests, and review:
+
+- **XS:** under 1 day
+- **S:** 1–3 days
+- **M:** 3–7 days
+- **L:** 1–3 weeks
+- **XL:** more than 3 weeks or a phased programme
+
+Severity meanings:
+
+- **Critical:** release or security boundary risk; resolve before broad production use.
+- **High:** material reliability, integrity, scalability, or product-trust risk; prioritise next.
+- **Medium:** meaningful maintainability or usability risk with an available workaround.
+- **Low:** polish, consistency, or forward-maintenance improvement.
+
+## Critical
+
+| ID | Area | Current violation and evidence | Required outcome | Effort |
+|---|---|---|---|---:|
+| C-01 | Canonical API/domain | The application exposes both `/api/v1` and a legacy `/api` router. The legacy surface duplicates login, user, patrol-log, and incident behaviour, creating two contracts and policy-drift risk. | Inventory consumers, move them to `/api/v1`, add deprecation telemetry, then remove or strictly isolate the legacy router. Maintain one canonical permission and error contract. | L |
+| C-02 | Invitations/secrets | User creation returns a raw invitation token and the frontend displays it in a notification. Tokens can leak through screens, support captures, logs, or copied messages. | Deliver a single-use, short-lived invitation through an approved channel; show only delivery status; rotate/revoke safely; never expose token values in normal UI or logs. | M |
+| C-03 | Product truth | Reports can be “generated,” downloaded, and removed only in React memory; Settings reports success without persistence. These controls present non-authoritative actions as successful. | Hide or clearly mark incomplete workflows until backed by tenant-scoped APIs, persistence, permissions, validation, and audit history. Reports must derive from real data. | M |
+| C-04 | Operational domain integrity | `Incident` and `Alert` are separate overlapping models while communications also reuse alerts. Competing representations can split history, status, permissions, and reporting. | Establish canonical Incident, Alert/Escalation, and Communication boundaries; migrate data safely; provide explicit relationships and lifecycle rules; retire duplicates. | L |
+
+## High
+
+| ID | Area | Current violation and evidence | Required outcome | Effort |
+|---|---|---|---|---:|
+| H-01 | Schema authority | Development startup calls `Base.metadata.create_all()` and maintains a manual SQLite `ALTER TABLE` compatibility map alongside Alembic. This permits schema paths to diverge. | Make Alembic the only persistent-schema authority. Use migrated disposable databases for development and remove manual schema mutation after a documented transition. | M |
+| H-02 | Frontend architecture | `frontend/src/App.js` is approximately 3,372 lines and contains navigation, authentication, API access, domain screens, dialogs, forms, and business calculations. | Split by domain route with a small shell, central API client, shared query/state primitives, reusable form controls, and independently testable components. | XL |
+| H-03 | Routing | Page selection is primarily local `activeNav` state rather than canonical URL routing. Deep links, refresh, browser navigation, support links, and route-level permission handling are limited. | Add accessible URL routing, guarded routes, not-found/forbidden screens, preserved intended destinations, and navigation tests. | M |
+| H-04 | Distributed security | Rate limiting is stored in a process-local Python dictionary keyed by IP and path. It resets on restart, differs per instance, and can grow without a global bound. | Use a shared, bounded rate limiter or trusted edge enforcement, define proxy-aware identity rules, and add endpoint-specific policies and observability. | M |
+| H-05 | Transactional audit | Several CRUD paths commit the business record before writing the audit event; notifications and related writes may use additional commits. A failure can leave incomplete history. | Define a unit-of-work boundary so required business state and audit outbox/event are committed atomically; deliver side effects after commit. | L |
+| H-06 | Time correctness | Persistent operational timestamps use timezone-naive `DateTime` columns and application code compensates during comparison. Day boundaries and DST can produce inconsistent results. | Adopt timezone-aware UTC instants, organisation timezone conversion for local schedules, a safe migration/backfill policy, and DST boundary tests. | L |
+| H-07 | API error contract | Most endpoints return free-form `{detail: string}` errors without stable codes, field details, or correlation IDs. The frontend must infer meaning from prose. | Implement the standard error envelope and request IDs; map validation, auth, conflict, rate-limit, and domain errors consistently. | M |
+| H-08 | Query scalability | Availability and recommendation logic expands team memberships and workloads through repeated queries and Python aggregation. This risks N+1 behaviour as tenants grow. | Profile representative volumes; replace repeated reads with bounded aggregate/join queries; add indexes, query-count tests, and performance budgets. | M |
+| H-09 | Release/migrations | Database migration runs in the application startup command. Multiple starting instances can contend, and application availability is coupled to migration execution. | Use one controlled pre-deploy/release migration job with locking, backward-compatible migrations, health gates, and a rollback/runbook strategy. | M |
+| H-10 | Delivery safeguards | No active repository CI workflow was found to enforce backend tests, frontend tests/build, migrations, drift, secret scanning, or diff checks before merge. | Add protected-branch CI with deterministic dependency installation, PostgreSQL migration tests, test/build gates, dependency and secret scans, and artifact provenance. | M |
+| H-11 | Checkpoint assurance | Checkpoint verification relies on a human-readable code; the system does not record a strong physical-presence method such as managed QR/NFC/device evidence. A known code may be submitted remotely. | Define assurance levels, issue collision-resistant codes, record verification method/device/context, and add optional stronger presence proof without exposing sensitive location unnecessarily. | L |
+| H-12 | Data uniqueness | Some uniqueness rules do not fully reflect tenant semantics—for example vehicle serial number is globally unique, while team-name uniqueness may be case-sensitive. | Document global versus tenant identity, use normalised values and tenant-scoped constraints where appropriate, and migrate duplicates safely. | M |
+| H-13 | Destructive lifecycle | Archive/delete behaviour and recovery are inconsistent; native confirms remain, incident removal lacks an operational reason, and restore workflows are limited. | Standardise archive, cancellation reason, retention, restore, and permanent deletion policy; use contextual dialogs and auditable reversible actions. | M |
+| H-14 | Observability | The application lacks a consistent correlation-ID, structured event, metrics, trace, and alerting contract across API, jobs, migrations, and frontend failures. | Add privacy-safe structured logging, request correlation, service metrics, error reporting, migration visibility, and actionable alerts with retention controls. | L |
+| H-15 | Accessibility foundation | Custom dialogs and form controls do not yet demonstrate a consistent focus trap/restore, label association, live error announcement, and keyboard test contract. | Build accessible shared primitives, audit against WCAG 2.2 AA, remediate critical flows, and add automated plus manual accessibility checks. | L |
+
+## Medium
+
+| ID | Area | Current violation and evidence | Required outcome | Effort |
+|---|---|---|---|---:|
+| M-01 | API collections | Pagination, filtering, sorting, search, response metadata, and maximum page sizes vary by endpoint; some lists load broad datasets into the UI. | Adopt one collection contract and reusable backend/frontend primitives. | M |
+| M-02 | API semantics | Create/delete status codes and response shapes vary across resources. | Publish and incrementally enforce one HTTP semantics matrix with contract tests. | S |
+| M-03 | Idempotency | Creation flows do not consistently protect against retry, double-click, or network-replay duplicates. | Add idempotency keys or domain uniqueness for consequential creates and make frontend submissions single-flight. | M |
+| M-04 | Status/state machines | Several lifecycle values remain loosely constrained strings, and some interfaces can offer transitions without a central transition model. | Define enums and explicit server-side state machines, database constraints, permission rules, and transition-specific UI. | M |
+| M-05 | Patrol compatibility field | Patrol `assigned_to` remains a writable/display fallback beside structured team/officer assignments. | Make it read-only legacy history, backfill structured references where reliable, expose provenance, and remove it from new writes after compatibility review. | M |
+| M-06 | Officer staffing visibility | Officer views do not yet provide one authoritative view of available, deployed, off-shift, future leave, and unassigned-to-team states. | Introduce a clearly defined availability projection and consolidated filterable staffing board as underlying shift/leave data becomes authoritative. | L |
+| M-07 | Workforce modelling | Shifts, leave, fatigue, qualifications, licences, and site eligibility are not represented; assignment recommendations correctly cannot use them yet. | Design each as explicit tenant-scoped data with effective dates and audit history before incorporating it into recommendations. | XL |
+| M-08 | Recommendation horizon | Workload ranking can count broad future assignment data without an explicit scheduling horizon or configurable policy. | Define a bounded, explainable workload window and organisation policy; show recommendation rationale. | S |
+| M-09 | Incident prevention | Duplicate-incident detection, templates/presets, and context-aware status choices are incomplete. | Add conservative duplicate warnings, configurable templates, explicit transitions, and override audit without blocking legitimate reports. | M |
+| M-10 | Checkpoint creation | Client-generated timestamp-based checkpoint codes can collide and collision feedback occurs late. | Generate collision-resistant, human-friendly codes server-side and provide immediate uniqueness feedback. | S |
+| M-11 | Permission contract | Frontend permission names and navigation rules are manually maintained separately from backend permission definitions. | Generate or share a versioned permission manifest and fail closed on unknown permissions. | M |
+| M-12 | Role architecture | Roles and permission mappings are code-defined and cannot yet support audited tenant-specific custom roles or temporary grants. | Design immutable system roles plus constrained custom roles, versioned grants, effective dates, and change audit. | L |
+| M-13 | User/tenant membership | A globally unique user email tied directly to one organisation limits future multi-company membership, contractors, and delegated administration. | Before such features, introduce identity separate from organisation membership; do not redesign prematurely. | XL |
+| M-14 | Audit usefulness | Audit details are not uniformly structured as before/after changes with reason and correlation. | Define typed audit events, safe diffs, actor/context, reason, retention, access, and export rules. | M |
+| M-15 | Frontend data handling | Loading, errors, cancellation, caching, and mutation invalidation are implemented locally in the application component. | Introduce a central API/query layer and shared state components during App decomposition. | L |
+| M-16 | Native dialogs | Patrol and team actions still use `window.confirm`, which provides limited context, accessibility control, and recovery guidance. | Replace with shared contextual confirmation only for consequential actions. | S |
+| M-17 | Domain naming | The frontend “Documents” workflow maps to customer/site records, creating a mismatch between user expectation and stored domain. | Rename the UI to the real domain or implement a genuine document model with access, retention, scanning, and audit rules. | M |
+| M-18 | Repository boundaries | Active FastAPI/React code coexists with PHP, mobile, prototypes, generated builds, and documentation assets without an explicit support-status boundary. | Document authoritative applications and ownership; archive or isolate unsupported implementations; ensure builds and scans target the intended product. | M |
+| M-19 | Background delivery | Invitations, reports, notifications, and exports lack a durable job/delivery foundation. | Add an idempotent queue/outbox, retry/dead-letter policy, delivery status, and worker observability before expanding these features. | L |
+| M-20 | Dependency governance | Dependency auditing occurs manually and no documented update/SBOM/exception policy is enforced. | Add lock/update policy, CI scanning, runtime-versus-build classification, SBOM generation, and time-bounded exceptions. | M |
+| M-21 | Test architecture | Tests cover important behaviour but shared application/database setup and compatibility paths make isolation and environment parity harder to reason about. | Standardise disposable fixtures, PostgreSQL parity for database-sensitive tests, deterministic clocks, and query/concurrency test helpers. | M |
+| M-22 | Security policy | Security headers include legacy directives and inline script/style allowances; proxy trust and browser policy need a deployment-specific threat review. | Define CSP nonces/hashes where feasible, remove obsolete headers, constrain trusted proxies, and test production headers. | M |
+
+## Low
+
+| ID | Area | Current violation and evidence | Required outcome | Effort |
+|---|---|---|---|---:|
+| L-01 | Framework lifecycle | FastAPI startup uses deprecated event hooks. | Move startup/shutdown work to a lifespan handler with tests. | XS |
+| L-02 | Test dependencies | Test output includes deprecation warnings from framework/client compatibility. | Align supported dependency versions and remove warnings before they become breaking changes. | S |
+| L-03 | Terminology | Organisation/organization, officer/employee, archive/delete, and availability language is not fully standardised. | Maintain a domain glossary and apply canonical user-facing/API terms during touched-feature work. | S |
+| L-04 | Design consistency | Some screens use one-off inline styles and interaction patterns rather than shared tokens and primitives. | Move repeated patterns into the design system as components are extracted; avoid a cosmetic-only rewrite. | M |
+| L-05 | Documentation governance | Architecture decisions and standards exceptions do not have a formal lightweight record. | Add ADR and exception templates with owners and review dates. | S |
+
+## Recommended implementation order
+
+### Phase 0 — Stop misleading or unsafe release behaviour
+
+1. **C-02** secure the invitation flow.
+2. **C-03** hide or make Reports and Settings honest until persistence exists.
+3. **H-10** establish mandatory CI and protected release gates.
+4. **H-09** separate controlled migrations from application startup.
+
+### Phase 1 — Establish one authoritative platform
+
+5. **C-01** retire the duplicate `/api` surface through a measured deprecation.
+6. **C-04** resolve Incident, Alert, and Communication domain ownership.
+7. **H-01** make Alembic the only schema authority.
+8. **H-05** make audit history transactional.
+9. **H-06** establish timezone-safe persistence and scheduling.
+
+### Phase 2 — Make security and contracts scalable
+
+10. **H-04**, **H-07**, and **H-14** implement distributed protection, standard errors, and observability.
+11. **H-12**, **M-01**, **M-02**, **M-03**, and **M-04** enforce data/API consistency.
+12. **M-11**, **M-12**, and **M-14** strengthen permission and audit contracts.
+13. **M-20** add dependency and supply-chain governance.
+
+### Phase 3 — Create a maintainable, accessible frontend foundation
+
+14. Decompose the application through **H-02**, **H-03**, and **M-15**, preserving behaviour feature by feature.
+15. Complete **H-15**, **M-16**, **M-17**, and **L-04** using shared accessible primitives.
+16. Do not perform a one-shot visual rewrite; migrate one tested domain route at a time.
+
+### Phase 4 — Strengthen operations workflows
+
+17. Complete **H-08**, **M-05**, **M-06**, and **M-08** for explainable, scalable staffing.
+18. Complete **H-11**, **M-09**, and **M-10** for trustworthy checkpoint and incident handling.
+19. Add **M-07** workforce capabilities only as real source data becomes available.
+20. Add durable delivery and exports through **M-19** before presenting those workflows as complete.
+
+### Phase 5 — Platform maturity
+
+21. Resolve repository/product boundaries (**M-18**) and test architecture (**M-21**).
+22. Revisit identity/membership (**M-13**) only when multi-organisation users are a confirmed requirement.
+23. Complete low-priority lifecycle, terminology, design-system, and governance work.
+
+## Rules for managing this backlog
+
+- Critical items MUST be explicitly accepted or resolved before broad production rollout.
+- High items MUST have owners and target milestones.
+- New feature work MUST NOT deepen an identified violation.
+- When a feature touches a debt item, the team SHOULD fix the relevant boundary in the same change or document why it is deferred.
+- Effort and severity MUST be recalibrated after discovery; changing an estimate does not remove the requirement.
+- This roadmap is a living register. Each resolved item should link to tests, migration evidence where applicable, and the decision record.
