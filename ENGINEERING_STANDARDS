@@ -53,6 +53,22 @@ The safest valid action SHOULD be the easiest action. Impossible actions SHOULD 
 7. Prefer organisation-wide consistency over page-specific conventions.
 8. Do not imply that an action succeeded unless the authoritative backend confirms it.
 
+### Mandatory discoverability principle
+
+> If a user asks, “Where do I do this?”, the design has failed.
+
+Every significant feature review MUST answer:
+
+- Can a new Operations Manager find the action without training?
+- Is the action available at the point where the need arises?
+- Are related tasks grouped into one coherent workflow?
+- Must the user navigate elsewhere merely to gather required context?
+- Is there one obvious canonical place to perform the action?
+
+A negative answer to any of the first three or fifth questions, or a positive
+answer to the fourth, MUST be resolved before completion or recorded as an
+approved standards exception.
+
 ---
 
 ## 2. UX Principles
@@ -210,6 +226,14 @@ Validation, permission, conflict, not-found, and rate-limit errors MUST be disti
 - Repeated form, table, and state-transition logic SHOULD be schema- or component-driven.
 - Mobile and keyboard behaviour MUST be covered by representative tests.
 
+### Incremental application decomposition
+
+`App.js` decomposition MUST happen incrementally during Operations Core
+development. Every workflow that is materially changed SHOULD be moved into its
+intended feature module where practical. The team MUST NOT wait for a standalone
+monolith rewrite, and `App.js` MUST NOT be expanded further without documented
+justification.
+
 ---
 
 ## 7. Human Error Prevention Checklist
@@ -265,6 +289,15 @@ Implementation then follows this sequence:
 10. Review the completed workflow against this document.
 
 Exceptions MUST name the violated standard, reason, risk, owner, compensating control, and removal date.
+
+### Next product milestone
+
+> A complete Operations Workspace from which a manager can understand staffing,
+> schedule patrols, resolve conflicts, monitor deployments, and respond to
+> current incidents without jumping between disconnected pages.
+
+Work contributing to this milestone MUST be reviewed as a coherent daily
+operations workflow, not as a collection of independent modules.
 
 ---
 
