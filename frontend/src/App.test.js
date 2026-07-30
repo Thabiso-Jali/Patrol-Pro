@@ -233,6 +233,44 @@ test('login uses server permissions and logout revokes the backend session', asy
   view.cleanup();
 });
 
+test('officers page renders accepted operational users from the API', async () => {
+  global.fetch = jest.fn((url) => {
+    if (url.endsWith('/auth/token')) {
+      return Promise.resolve(jsonResponse({ access_token: 'token', refresh_token: 'refresh' }));
+    }
+    if (url.endsWith('/auth/me')) {
+      return Promise.resolve(jsonResponse({
+        user: { id: 1, email: 'owner@example.com', role: 'company_owner' },
+        company: { id: 1, name: 'Test Company' },
+        role: 'company_owner',
+        permissions: ['dashboard.view', 'users.view'],
+      }));
+    }
+    if (url.endsWith('/dashboard/stats')) return Promise.resolve(jsonResponse(emptyStats));
+    if (url.endsWith('/users/officers')) {
+      return Promise.resolve(jsonResponse([{
+        id: 2,
+        email: 'employee@example.com',
+        full_name: 'Accepted Employee',
+        role: 'employee',
+        organisation_id: 1,
+      }]));
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const view = renderInteractive(<App />);
+  await submitLogin(view);
+  await flushPromises();
+
+  const officersLink = Array.from(view.container.querySelectorAll('button'))
+    .find((button) => button.textContent.includes('Officers'));
+  act(() => officersLink.click());
+
+  expect(view.container.textContent).toContain('Accepted Employee');
+  expect(view.container.textContent).toContain('employee@example.com');
+  view.cleanup();
+});
+
 test('an expired access token clears protected content safely', async () => {
   global.fetch = jest.fn((url) => {
     if (url.endsWith('/auth/token')) {

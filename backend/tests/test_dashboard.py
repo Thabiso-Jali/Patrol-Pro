@@ -105,6 +105,13 @@ def test_dashboard_counts_are_live_and_organisation_scoped():
     )
     assert officer_response.status_code == 201
 
+    first_officers = client.get("/api/v1/users/officers", headers=first_headers)
+    second_officers = client.get("/api/v1/users/officers", headers=second_headers)
+    assert first_officers.status_code == 200
+    assert [user["email"] for user in first_officers.json()] == [officer_email]
+    assert second_officers.status_code == 200
+    assert second_officers.json() == []
+
     alert_response = client.post(
         "/api/v1/alerts/",
         json={

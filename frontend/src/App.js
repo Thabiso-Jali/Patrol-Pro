@@ -1034,11 +1034,8 @@ function AppInner() {
 
   // Officers
   const [officers, setOfficers] = useState([]);
-  const [officerForm, setOfficerForm] = useState({ name: '', badge: '', status: '', zone: '' });
-  const [showEditOfficerModal, setShowEditOfficerModal] = useState(false);
-  const [editingOfficerId, setEditingOfficerId] = useState(null);
-  const [showRemoveOfficerModal, setShowRemoveOfficerModal] = useState(false);
-  const [removingOfficerId, setRemovingOfficerId] = useState(null);
+  const [officersLoading, setOfficersLoading] = useState(false);
+  const [officersError, setOfficersError] = useState('');
 
   // Incidents
   const [incidents, setIncidents] = useState([]);
@@ -1276,59 +1273,23 @@ function AppInner() {
     setEditingPatrolId(null);
   };
 
-  const startEditOfficer = (officer) => {
-    setOfficerForm({
-      name: officer.name,
-      badge: officer.badge,
-      status: officer.status,
-      zone: officer.zone,
-    });
-    setEditingOfficerId(officer.id);
-    setShowEditOfficerModal(true);
-  };
-
-  const closeEditOfficer = () => {
-    setShowEditOfficerModal(false);
-    setEditingOfficerId(null);
-    setOfficerForm({ name: '', badge: '', status: '', zone: '' });
-  };
-
-  const handleUpdateOfficer = () => {
-    if (!officerForm.name || !officerForm.badge) {
-      notify('Name and badge are required', 'error');
-      return;
+  const loadOfficers = async () => {
+    setOfficersLoading(true);
+    setOfficersError('');
+    const result = await apiCall(`${API_BASE}/users/officers`, { method: 'GET' });
+    if (result.ok) {
+      setOfficers(result.data);
+    } else {
+      setOfficers([]);
+      setOfficersError('Officers are unavailable.');
     }
-
-    setOfficers(officers.map((o) => (
-      o.id === editingOfficerId
-        ? {
-            ...o,
-            name: officerForm.name,
-            badge: officerForm.badge,
-            status: officerForm.status || 'On Duty',
-            zone: officerForm.zone,
-          }
-        : o
-    )));
-    notify('Officer updated successfully!');
-    closeEditOfficer();
+    setOfficersLoading(false);
   };
 
-  const requestRemoveOfficer = (officerId) => {
-    setRemovingOfficerId(officerId);
-    setShowRemoveOfficerModal(true);
-  };
-
-  const closeRemoveOfficer = () => {
-    setShowRemoveOfficerModal(false);
-    setRemovingOfficerId(null);
-  };
-
-  const confirmRemoveOfficer = () => {
-    if (removingOfficerId === null) return;
-    setOfficers(officers.filter((o) => o.id !== removingOfficerId));
-    notify('Officer removed successfully!');
-    closeRemoveOfficer();
+  const openOfficerInvitation = () => {
+    setUserForm({ email: '', full_name: '', role: 'employee' });
+    setActiveNav('users');
+    setShowUserModal(true);
   };
 
   const toDateTimeLocal = (value) => {
@@ -1717,6 +1678,7 @@ function AppInner() {
     if (result.ok) {
       setManagedUsers([...managedUsers, result.data]);
       loadDashboardStats();
+      loadOfficers();
       setUserForm({ email: '', full_name: '', role: 'employee' });
       setShowUserModal(false);
       notify(`Invitation created. Token: ${result.data.invitation_token}`);
@@ -1743,6 +1705,7 @@ function AppInner() {
     if (!token || !authContext) return;
     if (canAccessPage('dashboard', authContext.permissions)) loadDashboardStats();
     if (canAccessPage('patrols', authContext.permissions)) loadPatrols();
+    if (canAccessPage('officers', authContext.permissions)) loadOfficers();
     if (canAccessPage('vehicles', authContext.permissions)) loadVehicles();
     if (canAccessPage('communications', authContext.permissions)) loadCommunications();
     if (canAccessPage('documents', authContext.permissions)) loadDocuments();
@@ -1919,23 +1882,34 @@ function AppInner() {
       <div style={{ marginBottom: spacing.lg }}>
         <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
           <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Officers</h1>
-          <Button icon="add">Add Officer</Button>
+          <Button icon="add" onClick={openOfficerInvitation}>Add Officer</Button>
         </div>
         <p style={{ ...typography.bodyLg, margin: 0, color: colors.slate500 }}>
           Manage your security officers and their assignments
         </p>
       </div>
 
+      {officersLoading ? (
+        <Card><p style={{ ...typography.bodyMd, color: colors.slate500 }}>Loading officers…</p></Card>
+      ) : officersError ? (
+        <Card><p role="alert" style={{ ...typography.bodyMd, color: colors.error }}>{officersError}</p></Card>
+      ) : officers.length === 0 ? (
+        <Card>
+          <p style={{ ...typography.bodyMd, color: colors.slate500 }}>
+            No officers yet. Invite an employee to add them to this list.
+          </p>
+        </Card>
+      ) : (
       <div className="pp-card-grid">
         {officers.map((officer) => (
           <Card key={officer.id} highlight>
             <h3 style={{ ...typography.headingSm, margin: 0, marginBottom: spacing.sm, color: colors.slate900 }}>
-              {officer.name}
+              {officer.full_name || officer.email}
             </h3>
             <div style={{ marginBottom: spacing.md }}>
-              <p style={{ ...typography.labelSm, color: colors.slate500, margin: 0 }}>Badge</p>
+              <p style={{ ...typography.labelSm, color: colors.slate500, margin: 0 }}>Email</p>
               <p style={{ ...typography.bodyMd, margin: 0, fontWeight: 600, color: colors.slate900 }}>
-                {officer.badge}
+                {officer.email}
               </p>
             </div>
             <div style={{
@@ -1948,62 +1922,17 @@ function AppInner() {
             }}>
               <div>
                 <p style={{ ...typography.labelSm, color: colors.slate500, margin: 0 }}>Status</p>
-                <Badge variant={officer.status === 'On Duty' ? 'success' : 'warning'}>{officer.status}</Badge>
+                <Badge variant="success">Active</Badge>
               </div>
               <div>
-                <p style={{ ...typography.labelSm, color: colors.slate500, margin: 0 }}>Zone</p>
-                <p style={{ ...typography.bodyMd, margin: 0, fontWeight: 500 }}>{officer.zone}</p>
+                <p style={{ ...typography.labelSm, color: colors.slate500, margin: 0 }}>Role</p>
+                <p style={{ ...typography.bodyMd, margin: 0, fontWeight: 500 }}>{officer.role}</p>
               </div>
-            </div>
-            <div className="pp-row-actions" style={{ display: 'flex', gap: spacing.sm }}>
-              <Button variant="secondary" size="sm" fullWidth icon="edit" onClick={() => startEditOfficer(officer)}>Edit</Button>
-              <Button variant="danger" size="sm" fullWidth icon="trash" onClick={() => requestRemoveOfficer(officer.id)}>Remove</Button>
             </div>
           </Card>
         ))}
       </div>
-
-      <Modal open={showEditOfficerModal} onClose={closeEditOfficer} title="Edit Officer">
-        <TextField
-          label="Name"
-          value={officerForm.name}
-          onChange={(v) => setOfficerForm({ ...officerForm, name: v })}
-          placeholder="Officer name"
-          autoFocus={true}
-        />
-        <TextField
-          label="Badge"
-          value={officerForm.badge}
-          onChange={(v) => setOfficerForm({ ...officerForm, badge: v })}
-          placeholder="P-001"
-        />
-        <TextField
-          label="Status"
-          value={officerForm.status}
-          onChange={(v) => setOfficerForm({ ...officerForm, status: v })}
-          placeholder="On Duty"
-        />
-        <TextField
-          label="Zone"
-          value={officerForm.zone}
-          onChange={(v) => setOfficerForm({ ...officerForm, zone: v })}
-          placeholder="Zone A"
-        />
-        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
-          <Button onClick={closeEditOfficer} variant="secondary" fullWidth>Cancel</Button>
-          <Button onClick={handleUpdateOfficer} fullWidth>Save Changes</Button>
-        </div>
-      </Modal>
-
-      <Modal open={showRemoveOfficerModal} onClose={closeRemoveOfficer} title="Remove Officer">
-        <p style={{ ...typography.bodyMd, color: colors.slate700, marginBottom: spacing.lg }}>
-          Are you sure you want to remove this officer?
-        </p>
-        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md }}>
-          <Button onClick={closeRemoveOfficer} variant="secondary" fullWidth>Cancel</Button>
-          <Button onClick={confirmRemoveOfficer} variant="danger" fullWidth>Remove</Button>
-        </div>
-      </Modal>
+      )}
     </div>
   );
 
