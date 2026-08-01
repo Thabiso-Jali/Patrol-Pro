@@ -2,8 +2,21 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { lightTokens, darkTokens, spacing, radius, typography, shadows, transitions } from './theme';
 import { API_BASE_URL } from './apiConfig';
 import { canAccessPage, visibleNavigation } from './rbac';
+import CustomersPage from './features/customers/CustomersPage';
+import ReportsPage from './features/reports/ReportsPage';
+import SettingsPage from './features/settings/SettingsPage';
 
 const API_BASE = API_BASE_URL;
+
+export const CHECKPOINT_CONFIRMATION_COPY = Object.freeze({
+  action: 'Confirm Checkpoint Code',
+  accepted: 'Checkpoint code accepted',
+  assurance: 'Low-assurance manual confirmation',
+});
+
+export const checkpointStatusLabel = (status) => (
+  status === 'verified' ? 'Code accepted' : status
+);
 
 // ==================== THEME CONTEXT ====================
 const ThemeContext = createContext({ dark: false, toggle: () => {}, colors: lightTokens });
@@ -31,7 +44,7 @@ const Icon = ({ name, size = 20, color }) => {
   const icons = {
     dashboard: '📊', patrols: '🚶', officers: '👮', incidents: '⚠️',
     checkpoints: '📍', reports: '📋', analytics: '📈', vehicles: '🚗',
-    communications: '💬', documents: '📄', users: '👥', settings: '⚙️',
+    customers: '🏢', users: '👥', settings: '⚙️',
     home: '🏠', menu: '☰', x: '✕', search: '🔍', bell: '🔔',
     user: '👤', logout: '🚪', add: '➕', edit: '✏️', trash: '🗑️',
     check: '✓', clock: '⏱️', alertTriangle: '△', checkCircle: '✓◯',
@@ -644,7 +657,9 @@ const formatDashboardTime = (value) => {
 };
 
 const formatActivityAction = (action) => (
-  action
+  action === 'checkpoint.verify'
+    ? CHECKPOINT_CONFIRMATION_COPY.accepted
+    : action
     .split('.')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
@@ -705,7 +720,7 @@ export const DashboardContent = ({ stats, isLoading, error }) => {
         <KPICard title="Active Patrols" value={String(stats?.active_patrols ?? 0)} subtitle="Live patrol routes" icon="patrols" />
         <KPICard title="Officers" value={String(stats?.officers ?? 0)} subtitle="Active officer accounts" icon="officers" />
         <KPICard title="Open Incidents" value={String(stats?.open_incidents ?? 0)} subtitle="Needs attention" icon="incidents" />
-        <KPICard title="Pending Checkpoints" value={String(stats?.pending_checkpoints ?? 0)} subtitle="Awaiting verification" icon="checkpoints" />
+        <KPICard title="Pending Checkpoints" value={String(stats?.pending_checkpoints ?? 0)} subtitle="Awaiting code confirmation" icon="checkpoints" />
       </div>
 
       <div className="pp-dashboard-panels" style={{ marginBottom: spacing.lg }}>
@@ -1343,9 +1358,6 @@ function AppInner() {
   // Users
   const [users, setUsers] = useState([]);
 
-  // Reports
-  const [reports, setReports] = useState([]);
-
   // Vehicles (backed by devices API)
   const [vehicles, setVehicles] = useState([]);
   const [vehicleForm, setVehicleForm] = useState({ name: '', serial_number: '', status: 'active' });
@@ -1355,36 +1367,14 @@ function AppInner() {
   const [showRemoveVehicleModal, setShowRemoveVehicleModal] = useState(false);
   const [removingVehicleId, setRemovingVehicleId] = useState(null);
 
-  // Communications (backed by alerts API)
-  const [communications, setCommunications] = useState([]);
-  const [communicationForm, setCommunicationForm] = useState({ title: '', description: '', severity: 'medium', status: 'open' });
-  const [showCommunicationModal, setShowCommunicationModal] = useState(false);
-  const [showEditCommunicationModal, setShowEditCommunicationModal] = useState(false);
-  const [editingCommunicationId, setEditingCommunicationId] = useState(null);
-  const [showRemoveCommunicationModal, setShowRemoveCommunicationModal] = useState(false);
-  const [removingCommunicationId, setRemovingCommunicationId] = useState(null);
-
-  // Documents (backed by customers API)
-  const [documents, setDocuments] = useState([]);
-  const [documentForm, setDocumentForm] = useState({ name: '', contact_email: '', phone: '', address: '' });
-  const [showDocumentModal, setShowDocumentModal] = useState(false);
-  const [showEditDocumentModal, setShowEditDocumentModal] = useState(false);
-  const [editingDocumentId, setEditingDocumentId] = useState(null);
-  const [showRemoveDocumentModal, setShowRemoveDocumentModal] = useState(false);
-  const [removingDocumentId, setRemovingDocumentId] = useState(null);
-
-  // User management
-  const [managedUsers, setManagedUsers] = useState([]);
-  const [userForm, setUserForm] = useState({ email: '', full_name: '', role: 'employee' });
-  const [showUserModal, setShowUserModal] = useState(false);
-
-  // Settings
-  const [settingsForm, setSettingsForm] = useState({
-    companyName: '',
-    defaultShiftLength: '8',
-    incidentEscalationMinutes: '15',
-    emailNotifications: 'enabled',
-  });
+  // Customers
+  const [customers, setCustomers] = useState([]);
+  const [customerForm, setCustomerForm] = useState({ name: '', contact_email: '', phone: '', address: '' });
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [showEditCustomerModal, setShowEditCustomerModal] = useState(false);
+  const [editingCustomerId, setEditingCustomerId] = useState(null);
+  const [showArchiveCustomerModal, setShowArchiveCustomerModal] = useState(false);
+  const [archivingCustomerId, setArchivingCustomerId] = useState(null);
 
   const notify = (message, type = 'success') => {
     setNotification({ message, type });
@@ -1634,12 +1624,6 @@ function AppInner() {
     }
   };
 
-  const openOfficerInvitation = () => {
-    setUserForm({ email: '', full_name: '', role: 'employee' });
-    setActiveNav('users');
-    setShowUserModal(true);
-  };
-
   const toDateTimeLocal = (value) => {
     if (!value) return '';
     const date = value instanceof Date ? value : new Date(value);
@@ -1839,7 +1823,7 @@ function AppInner() {
       setVerifyingCheckpoint(null);
       setVerificationCode('');
       loadDashboardStats();
-      notify('Checkpoint verified');
+      notify(CHECKPOINT_CONFIRMATION_COPY.accepted);
     }
   };
 
@@ -1926,194 +1910,82 @@ function AppInner() {
     }
   };
 
-  const loadCommunications = async () => {
-    const result = await apiCall(`${API_BASE}/alerts/`, { method: 'GET' });
-    if (result.ok) {
-      setCommunications(result.data);
-    }
-  };
-
-  const handleCreateCommunication = async () => {
-    if (!communicationForm.title || !communicationForm.severity) {
-      notify('Title and severity are required', 'error');
-      return;
-    }
-    const payload = {
-      ...communicationForm,
-      reported_at: new Date().toISOString(),
-      patrol_id: null,
-      device_id: null,
-      customer_id: null,
-    };
-    const result = await apiCall(`${API_BASE}/alerts/`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    if (result.ok) {
-      setCommunications([result.data, ...communications]);
-      loadDashboardStats();
-      setCommunicationForm({ title: '', description: '', severity: 'medium', status: 'open' });
-      setShowCommunicationModal(false);
-      notify('Communication logged successfully!');
-    }
-  };
-
-  const startEditCommunication = (communication) => {
-    setCommunicationForm({
-      title: communication.title,
-      description: communication.description || '',
-      severity: communication.severity,
-      status: communication.status,
-    });
-    setEditingCommunicationId(communication.id);
-    setShowEditCommunicationModal(true);
-  };
-
-  const closeEditCommunication = () => {
-    setShowEditCommunicationModal(false);
-    setEditingCommunicationId(null);
-    setCommunicationForm({ title: '', description: '', severity: 'medium', status: 'open' });
-  };
-
-  const handleUpdateCommunication = async () => {
-    if (!communicationForm.title || !communicationForm.severity) {
-      notify('Title and severity are required', 'error');
-      return;
-    }
-    const existing = communications.find((c) => c.id === editingCommunicationId);
-    const payload = {
-      ...communicationForm,
-      reported_at: existing?.reported_at || new Date().toISOString(),
-      patrol_id: existing?.patrol_id ?? null,
-      device_id: existing?.device_id ?? null,
-      customer_id: existing?.customer_id ?? null,
-    };
-    const result = await apiCall(`${API_BASE}/alerts/${editingCommunicationId}`, {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    });
-    if (result.ok) {
-      setCommunications(communications.map((c) => (c.id === editingCommunicationId ? result.data : c)));
-      loadDashboardStats();
-      notify('Communication updated successfully!');
-      closeEditCommunication();
-    }
-  };
-
-  const requestRemoveCommunication = (communicationId) => {
-    setRemovingCommunicationId(communicationId);
-    setShowRemoveCommunicationModal(true);
-  };
-
-  const closeRemoveCommunication = () => {
-    setShowRemoveCommunicationModal(false);
-    setRemovingCommunicationId(null);
-  };
-
-  const confirmRemoveCommunication = async () => {
-    if (removingCommunicationId === null) return;
-    const result = await apiCall(`${API_BASE}/alerts/${removingCommunicationId}`, { method: 'DELETE' });
-    if (result.ok) {
-      setCommunications(communications.filter((c) => c.id !== removingCommunicationId));
-      loadDashboardStats();
-      notify('Communication removed successfully!');
-      closeRemoveCommunication();
-    }
-  };
-
-  const loadDocuments = async () => {
+  const loadCustomers = async () => {
     const result = await apiCall(`${API_BASE}/customers/`, { method: 'GET' });
     if (result.ok) {
-      setDocuments(result.data);
+      setCustomers(result.data);
     }
   };
 
-  const handleCreateDocument = async () => {
-    if (!documentForm.name) {
-      notify('Site name is required', 'error');
+  const handleCreateCustomer = async () => {
+    if (!customerForm.name) {
+      notify('Customer name is required', 'error');
       return;
     }
     const result = await apiCall(`${API_BASE}/customers/`, {
       method: 'POST',
-      body: JSON.stringify(documentForm),
+      body: JSON.stringify(customerForm),
     });
     if (result.ok) {
-      setDocuments([...documents, result.data]);
-      setDocumentForm({ name: '', contact_email: '', phone: '', address: '' });
-      setShowDocumentModal(false);
-      notify('Site document created successfully!');
+      setCustomers([...customers, result.data]);
+      setCustomerForm({ name: '', contact_email: '', phone: '', address: '' });
+      setShowCustomerModal(false);
+      notify('Customer created');
     }
   };
 
-  const startEditDocument = (document) => {
-    setDocumentForm({
-      name: document.name,
-      contact_email: document.contact_email || '',
-      phone: document.phone || '',
-      address: document.address || '',
+  const startEditCustomer = (customer) => {
+    setCustomerForm({
+      name: customer.name,
+      contact_email: customer.contact_email || '',
+      phone: customer.phone || '',
+      address: customer.address || '',
     });
-    setEditingDocumentId(document.id);
-    setShowEditDocumentModal(true);
+    setEditingCustomerId(customer.id);
+    setShowEditCustomerModal(true);
   };
 
-  const closeEditDocument = () => {
-    setShowEditDocumentModal(false);
-    setEditingDocumentId(null);
-    setDocumentForm({ name: '', contact_email: '', phone: '', address: '' });
+  const closeEditCustomer = () => {
+    setShowEditCustomerModal(false);
+    setEditingCustomerId(null);
+    setCustomerForm({ name: '', contact_email: '', phone: '', address: '' });
   };
 
-  const handleUpdateDocument = async () => {
-    if (!documentForm.name) {
-      notify('Site name is required', 'error');
+  const handleUpdateCustomer = async () => {
+    if (!customerForm.name) {
+      notify('Customer name is required', 'error');
       return;
     }
-    const result = await apiCall(`${API_BASE}/customers/${editingDocumentId}`, {
+    const result = await apiCall(`${API_BASE}/customers/${editingCustomerId}`, {
       method: 'PUT',
-      body: JSON.stringify(documentForm),
+      body: JSON.stringify(customerForm),
     });
     if (result.ok) {
-      setDocuments(documents.map((d) => (d.id === editingDocumentId ? result.data : d)));
-      notify('Site document updated successfully!');
-      closeEditDocument();
+      setCustomers(customers.map((customer) => (
+        customer.id === editingCustomerId ? result.data : customer
+      )));
+      notify('Customer updated');
+      closeEditCustomer();
     }
   };
 
-  const requestRemoveDocument = (documentId) => {
-    setRemovingDocumentId(documentId);
-    setShowRemoveDocumentModal(true);
+  const requestArchiveCustomer = (customerId) => {
+    setArchivingCustomerId(customerId);
+    setShowArchiveCustomerModal(true);
   };
 
-  const closeRemoveDocument = () => {
-    setShowRemoveDocumentModal(false);
-    setRemovingDocumentId(null);
+  const closeArchiveCustomer = () => {
+    setShowArchiveCustomerModal(false);
+    setArchivingCustomerId(null);
   };
 
-  const confirmRemoveDocument = async () => {
-    if (removingDocumentId === null) return;
-    const result = await apiCall(`${API_BASE}/customers/${removingDocumentId}`, { method: 'DELETE' });
+  const confirmArchiveCustomer = async () => {
+    if (archivingCustomerId === null) return;
+    const result = await apiCall(`${API_BASE}/customers/${archivingCustomerId}`, { method: 'DELETE' });
     if (result.ok) {
-      setDocuments(documents.filter((d) => d.id !== removingDocumentId));
-      notify('Site document removed successfully!');
-      closeRemoveDocument();
-    }
-  };
-
-  const handleInviteUser = async () => {
-    if (!userForm.email || !userForm.full_name) {
-      notify('Name and email are required', 'error');
-      return;
-    }
-    const result = await apiCall(`${API_BASE}/invitations`, {
-      method: 'POST',
-      body: JSON.stringify(userForm),
-    });
-    if (result.ok) {
-      setManagedUsers([...managedUsers, result.data]);
-      loadDashboardStats();
-      loadOfficers();
-      setUserForm({ email: '', full_name: '', role: 'employee' });
-      setShowUserModal(false);
-      notify(`Invitation created. Token: ${result.data.invitation_token}`);
+      setCustomers(customers.filter((customer) => customer.id !== archivingCustomerId));
+      notify('Customer archived');
+      closeArchiveCustomer();
     }
   };
 
@@ -2153,22 +2025,6 @@ function AppInner() {
     editingPatrolId,
   ]);
 
-  const generateReport = () => {
-    const report = {
-      id: Date.now(),
-      title: `Operational Snapshot ${new Date().toLocaleDateString()}`,
-      range: 'Today',
-      generated_at: new Date(),
-      status: 'ready',
-    };
-    setReports([report, ...reports]);
-    notify('Report generated successfully!');
-  };
-
-  const saveSettings = () => {
-    notify('Settings saved successfully!');
-  };
-
   useEffect(() => {
     if (!token || !authContext) return;
     if (canAccessPage('dashboard', authContext.permissions)) loadDashboardStats();
@@ -2179,8 +2035,7 @@ function AppInner() {
     if (canAccessPage('teams', authContext.permissions)) loadTeams();
     if (canAccessPage('my-team', authContext.permissions)) loadMyTeam();
     if (canAccessPage('vehicles', authContext.permissions)) loadVehicles();
-    if (canAccessPage('communications', authContext.permissions)) loadCommunications();
-    if (canAccessPage('documents', authContext.permissions)) loadDocuments();
+    if (canAccessPage('customers', authContext.permissions)) loadCustomers();
   }, [token, authContext]);
 
   const permissions = useMemo(() => authContext?.permissions || [], [authContext]);
@@ -2354,7 +2209,6 @@ function AppInner() {
       <div style={{ marginBottom: spacing.lg }}>
         <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
           <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Officers</h1>
-          <Button icon="add" onClick={openOfficerInvitation}>Add Officer</Button>
         </div>
         <p style={{ ...typography.bodyLg, margin: 0, color: colors.slate500 }}>
           Manage your security officers and their assignments
@@ -2368,7 +2222,7 @@ function AppInner() {
       ) : officers.length === 0 ? (
         <Card>
           <p style={{ ...typography.bodyMd, color: colors.slate500 }}>
-            No officers yet. Invite an employee to add them to this list.
+            No officers yet. Secure user invitation delivery is not yet available.
           </p>
         </Card>
       ) : (
@@ -2721,7 +2575,7 @@ function AppInner() {
           )}
         </div>
         <p style={{ ...typography.bodyLg, margin: 0, color: colors.slate500 }}>
-          Manage patrol checkpoints and verification points
+          Manage patrol checkpoints and low-assurance code confirmations.
         </p>
       </div>
 
@@ -2747,12 +2601,14 @@ function AppInner() {
             }}>
               <div>
                 <p style={{ ...typography.labelSm, color: colors.slate500, margin: 0 }}>Status</p>
-                <Badge variant={checkpoint.status === 'active' ? 'success' : 'warning'}>{checkpoint.status}</Badge>
+                <Badge variant={checkpoint.status === 'active' ? 'success' : 'warning'}>
+                  {checkpointStatusLabel(checkpoint.status)}
+                </Badge>
               </div>
               <div>
-                <p style={{ ...typography.labelSm, color: colors.slate500, margin: 0 }}>Verified</p>
+                <p style={{ ...typography.labelSm, color: colors.slate500, margin: 0 }}>Code confirmation</p>
                 <p style={{ ...typography.bodyMd, margin: 0, fontWeight: 500 }}>
-                  {checkpoint.verified_at ? formatDateTime(checkpoint.verified_at) : 'Not yet'}
+                  {checkpoint.verified_at ? `Accepted ${formatDateTime(checkpoint.verified_at)}` : 'Not confirmed'}
                 </p>
               </div>
             </div>
@@ -2766,7 +2622,7 @@ function AppInner() {
               <Button size="sm" fullWidth onClick={() => {
                 setVerifyingCheckpoint(checkpoint);
                 setVerificationCode('');
-              }}>Verify Checkpoint</Button>
+              }}>{CHECKPOINT_CONFIRMATION_COPY.action}</Button>
             )}
           </Card>
         ))}
@@ -2813,10 +2669,12 @@ function AppInner() {
       <Modal
         open={Boolean(verifyingCheckpoint)}
         onClose={() => setVerifyingCheckpoint(null)}
-        title="Verify Checkpoint"
+        title="Confirm Checkpoint Code"
       >
         <p style={{ ...typography.bodyMd }}>
-          Confirm the displayed checkpoint code at {verifyingCheckpoint?.location_label}.
+          Enter the displayed code at {verifyingCheckpoint?.location_label}. This is a{' '}
+          {CHECKPOINT_CONFIRMATION_COPY.assurance.toLowerCase()} and does not independently
+          prove physical presence.
         </p>
         <TextField
           label="Checkpoint Code"
@@ -2826,7 +2684,7 @@ function AppInner() {
         />
         <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md }}>
           <Button variant="secondary" fullWidth onClick={() => setVerifyingCheckpoint(null)}>Cancel</Button>
-          <Button fullWidth onClick={verifyCheckpoint}>Verify</Button>
+          <Button fullWidth onClick={verifyCheckpoint}>Submit Code</Button>
         </div>
       </Modal>
 
@@ -2839,46 +2697,6 @@ function AppInner() {
           <Button onClick={confirmRemoveCheckpoint} variant="danger" fullWidth>Remove</Button>
         </div>
       </Modal>
-    </div>
-  );
-
-  const ReportsContent = () => (
-    <div>
-      <div style={{ marginBottom: spacing.lg }}>
-        <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
-          <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Reports</h1>
-          <Button icon="add" onClick={generateReport}>Generate Report</Button>
-        </div>
-        <p style={{ ...typography.bodyLg, margin: 0, color: colors.slate500 }}>
-          Build and review operational summaries for leadership and dispatch.
-        </p>
-      </div>
-
-      <Card header="Report Library" actions={<Button variant="secondary" icon="load" onClick={() => notify('Report list is up to date')}>Refresh</Button>}>
-        <EnterpriseTable
-          columns={[
-            { key: 'title', label: 'Title' },
-            { key: 'range', label: 'Range' },
-            { key: 'generated', label: 'Generated' },
-            { key: 'status', label: 'Status' },
-          ]}
-          rows={reports.map((r) => ({
-            cells: {
-              title: r.title,
-              range: r.range,
-              generated: formatDateTime(r.generated_at),
-              status: r.status,
-            },
-            id: r.id,
-          }))}
-          actions={(row) => (
-            <>
-              <Button size="sm" variant="secondary" icon="download" onClick={() => notify(`Downloading ${row.cells.title}`)}>Export</Button>
-              <Button size="sm" variant="danger" icon="trash" onClick={() => setReports(reports.filter((r) => r.id !== row.id))}>Remove</Button>
-            </>
-          )}
-        />
-      </Card>
     </div>
   );
 
@@ -2899,7 +2717,7 @@ function AppInner() {
         <div className="pp-stats-grid" style={{ marginBottom: spacing.lg }}>
           <KPICard title="Open Incidents" value={String(openIncidents)} subtitle="Needs active follow-up" icon="incidents" color={colors.error} />
           <KPICard title="On-Duty Officers" value={String(onDutyOfficers)} subtitle="Currently active" icon="officers" color={colors.success} />
-          <KPICard title="Active Checkpoints" value={String(activeCheckpoints)} subtitle="Perimeter verified" icon="checkpoints" color={colors.blushPink} />
+          <KPICard title="Active Checkpoints" value={String(activeCheckpoints)} subtitle="Configured checkpoints" icon="checkpoints" color={colors.blushPink} />
           <KPICard title="Stored Vehicles" value={String(vehicles.length)} subtitle="Tracked units" icon="vehicles" color={colors.warning} />
         </div>
 
@@ -2986,211 +2804,21 @@ function AppInner() {
     </div>
   );
 
-  const CommunicationsContent = () => (
-    <div>
-      <div style={{ marginBottom: spacing.lg }}>
-        <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
-          <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Communications</h1>
-          <div className="pp-page-actions" style={{ display: 'flex', gap: spacing.md }}>
-            <Button variant="secondary" icon="load" onClick={loadCommunications}>Refresh</Button>
-            <Button icon="add" onClick={() => setShowCommunicationModal(true)}>Log Message</Button>
-          </div>
-        </div>
-        <p style={{ ...typography.bodyLg, margin: 0, color: colors.slate500 }}>
-          Dispatch messages and urgent operations communication logs.
-        </p>
-      </div>
-
-      <div className="pp-card-grid pp-card-grid-wide">
-        {communications.map((item) => (
-          <Card key={item.id} highlight>
-            <h3 style={{ ...typography.headingSm, margin: 0, marginBottom: spacing.sm, color: colors.slate900 }}>{item.title}</h3>
-            <p style={{ ...typography.bodySm, margin: 0, marginBottom: spacing.md, color: colors.slate500 }}>{item.description || 'No additional details'}</p>
-            <div style={{ display: 'flex', gap: spacing.sm, marginBottom: spacing.md }}>
-              <Badge variant={item.severity === 'high' ? 'error' : item.severity === 'medium' ? 'warning' : 'info'}>{item.severity}</Badge>
-              <Badge variant={item.status === 'open' ? 'error' : item.status === 'investigating' ? 'warning' : 'success'}>{item.status}</Badge>
-            </div>
-            <p style={{ ...typography.labelSm, color: colors.slate500, marginBottom: spacing.md }}>
-              Reported: {formatDateTime(item.reported_at)}
-            </p>
-            <div className="pp-row-actions" style={{ display: 'flex', gap: spacing.sm }}>
-              <Button size="sm" variant="secondary" fullWidth icon="edit" onClick={() => startEditCommunication(item)}>Edit</Button>
-              <Button size="sm" variant="danger" fullWidth icon="trash" onClick={() => requestRemoveCommunication(item.id)}>Remove</Button>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      <Modal open={showCommunicationModal} onClose={() => setShowCommunicationModal(false)} title="New Communication">
-        <TextField label="Title" value={communicationForm.title} onChange={(v) => setCommunicationForm({ ...communicationForm, title: v })} placeholder="Dispatch message title" autoFocus={true} />
-        <TextField label="Description" value={communicationForm.description} onChange={(v) => setCommunicationForm({ ...communicationForm, description: v })} placeholder="Message details" />
-        <TextField label="Severity" value={communicationForm.severity} onChange={(v) => setCommunicationForm({ ...communicationForm, severity: v })} placeholder="high | medium | low" />
-        <TextField label="Status" value={communicationForm.status} onChange={(v) => setCommunicationForm({ ...communicationForm, status: v })} placeholder="open | investigating | resolved" />
-        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
-          <Button variant="secondary" fullWidth onClick={() => setShowCommunicationModal(false)}>Cancel</Button>
-          <Button fullWidth onClick={handleCreateCommunication}>Create</Button>
-        </div>
-      </Modal>
-
-      <Modal open={showEditCommunicationModal} onClose={closeEditCommunication} title="Edit Communication">
-        <TextField label="Title" value={communicationForm.title} onChange={(v) => setCommunicationForm({ ...communicationForm, title: v })} placeholder="Dispatch message title" autoFocus={true} />
-        <TextField label="Description" value={communicationForm.description} onChange={(v) => setCommunicationForm({ ...communicationForm, description: v })} placeholder="Message details" />
-        <TextField label="Severity" value={communicationForm.severity} onChange={(v) => setCommunicationForm({ ...communicationForm, severity: v })} placeholder="high | medium | low" />
-        <TextField label="Status" value={communicationForm.status} onChange={(v) => setCommunicationForm({ ...communicationForm, status: v })} placeholder="open | investigating | resolved" />
-        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
-          <Button variant="secondary" fullWidth onClick={closeEditCommunication}>Cancel</Button>
-          <Button fullWidth onClick={handleUpdateCommunication}>Save</Button>
-        </div>
-      </Modal>
-
-      <Modal open={showRemoveCommunicationModal} onClose={closeRemoveCommunication} title="Remove Communication">
-        <p style={{ ...typography.bodyMd, color: colors.slate700, marginBottom: spacing.lg }}>Are you sure you want to remove this communication record?</p>
-        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md }}>
-          <Button variant="secondary" fullWidth onClick={closeRemoveCommunication}>Cancel</Button>
-          <Button variant="danger" fullWidth onClick={confirmRemoveCommunication}>Remove</Button>
-        </div>
-      </Modal>
-    </div>
-  );
-
-  const DocumentsContent = () => (
-    <div>
-      <div style={{ marginBottom: spacing.lg }}>
-        <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
-          <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Documents</h1>
-          <div className="pp-page-actions" style={{ display: 'flex', gap: spacing.md }}>
-            <Button variant="secondary" icon="load" onClick={loadDocuments}>Refresh</Button>
-            <Button icon="add" onClick={() => setShowDocumentModal(true)}>Add Site File</Button>
-          </div>
-        </div>
-        <p style={{ ...typography.bodyLg, margin: 0, color: colors.slate500 }}>
-          Site records, contact sheets, and address profiles.
-        </p>
-      </div>
-
-      <Card header="Site Document Register">
-        <EnterpriseTable
-          columns={[
-            { key: 'name', label: 'Site' },
-            { key: 'email', label: 'Email' },
-            { key: 'phone', label: 'Phone' },
-            { key: 'address', label: 'Address' },
-          ]}
-          rows={documents.map((d) => ({
-            cells: { name: d.name, email: d.contact_email || 'Not set', phone: d.phone || 'Not set', address: d.address || 'Not set' },
-            id: d.id, raw: d,
-          }))}
-          actions={(row) => (
-            <>
-              <Button size="sm" variant="secondary" icon="edit" onClick={() => startEditDocument(row.raw)}>Edit</Button>
-              <Button size="sm" variant="danger" icon="trash" onClick={() => requestRemoveDocument(row.id)}>Remove</Button>
-            </>
-          )}
-        />
-      </Card>
-
-      <Modal open={showDocumentModal} onClose={() => setShowDocumentModal(false)} title="Create Site Document">
-        <TextField label="Site Name" value={documentForm.name} onChange={(v) => setDocumentForm({ ...documentForm, name: v })} placeholder="Warehouse C" autoFocus={true} />
-        <TextField label="Contact Email" value={documentForm.contact_email} onChange={(v) => setDocumentForm({ ...documentForm, contact_email: v })} placeholder="ops@example.com" />
-        <TextField label="Phone" value={documentForm.phone} onChange={(v) => setDocumentForm({ ...documentForm, phone: v })} placeholder="555-1000" />
-        <TextField label="Address" value={documentForm.address} onChange={(v) => setDocumentForm({ ...documentForm, address: v })} placeholder="100 Main St" />
-        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
-          <Button variant="secondary" fullWidth onClick={() => setShowDocumentModal(false)}>Cancel</Button>
-          <Button fullWidth onClick={handleCreateDocument}>Create</Button>
-        </div>
-      </Modal>
-
-      <Modal open={showEditDocumentModal} onClose={closeEditDocument} title="Edit Site Document">
-        <TextField label="Site Name" value={documentForm.name} onChange={(v) => setDocumentForm({ ...documentForm, name: v })} placeholder="Warehouse C" autoFocus={true} />
-        <TextField label="Contact Email" value={documentForm.contact_email} onChange={(v) => setDocumentForm({ ...documentForm, contact_email: v })} placeholder="ops@example.com" />
-        <TextField label="Phone" value={documentForm.phone} onChange={(v) => setDocumentForm({ ...documentForm, phone: v })} placeholder="555-1000" />
-        <TextField label="Address" value={documentForm.address} onChange={(v) => setDocumentForm({ ...documentForm, address: v })} placeholder="100 Main St" />
-        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
-          <Button variant="secondary" fullWidth onClick={closeEditDocument}>Cancel</Button>
-          <Button fullWidth onClick={handleUpdateDocument}>Save</Button>
-        </div>
-      </Modal>
-
-      <Modal open={showRemoveDocumentModal} onClose={closeRemoveDocument} title="Remove Site Document">
-        <p style={{ ...typography.bodyMd, color: colors.slate700, marginBottom: spacing.lg }}>Are you sure you want to remove this site document?</p>
-        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md }}>
-          <Button variant="secondary" fullWidth onClick={closeRemoveDocument}>Cancel</Button>
-          <Button variant="danger" fullWidth onClick={confirmRemoveDocument}>Remove</Button>
-        </div>
-      </Modal>
-    </div>
-  );
-
   const UsersContent = () => (
     <div>
       <div style={{ marginBottom: spacing.lg }}>
-        <div className="pp-page-heading-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
-          <h1 style={{ ...typography.headingXL, margin: 0, color: colors.slate900 }}>Users</h1>
-          <Button icon="add" onClick={() => setShowUserModal(true)}>Invite User</Button>
-        </div>
+        <h1 style={{ ...typography.headingXL, margin: 0, marginBottom: spacing.md, color: colors.slate900 }}>
+          Users
+        </h1>
         <p style={{ ...typography.bodyLg, margin: 0, color: colors.slate500 }}>
-          Create additional platform users for your operations team.
+          Secure email invitation delivery is not yet available.
         </p>
       </div>
-
-      <Card header="Recently Invited Users">
-        {managedUsers.length === 0 ? (
-          <p style={{ ...typography.bodyMd, color: colors.slate500 }}>No invited users yet.</p>
-        ) : (
-          <EnterpriseTable
-            columns={[
-              { key: 'email', label: 'Email' },
-              { key: 'name', label: 'Name' },
-              { key: 'id', label: 'User ID' },
-            ]}
-            rows={managedUsers.map((u) => ({
-              cells: { email: u.email, name: u.full_name || 'Not set', id: String(u.id) },
-            }))}
-          />
-        )}
-      </Card>
-
-      <Modal open={showUserModal} onClose={() => setShowUserModal(false)} title="Invite User">
-        <TextField label="Full Name" value={userForm.full_name} onChange={(v) => setUserForm({ ...userForm, full_name: v })} placeholder="Alex Morgan" autoFocus={true} />
-        <TextField label="Email" value={userForm.email} onChange={(v) => setUserForm({ ...userForm, email: v })} placeholder="alex@patrolpro.com" />
-        <SelectField
-          label="Role"
-          value={userForm.role}
-          onChange={(role) => setUserForm({ ...userForm, role })}
-          options={[
-            { value: 'employee', label: 'Employee' },
-            { value: 'officer', label: 'Officer' },
-            { value: 'supervisor', label: 'Supervisor' },
-            { value: 'manager', label: 'Manager' },
-            { value: 'administrator', label: 'Administrator' },
-            { value: 'read_only', label: 'Read Only' },
-          ]}
-        />
-        <div className="pp-form-actions" style={{ display: 'flex', gap: spacing.md, marginTop: spacing.lg }}>
-          <Button variant="secondary" fullWidth onClick={() => setShowUserModal(false)}>Cancel</Button>
-          <Button fullWidth onClick={handleInviteUser}>Invite</Button>
-        </div>
-      </Modal>
-    </div>
-  );
-
-  const SettingsContent = () => (
-    <div>
-      <div style={{ marginBottom: spacing.lg }}>
-        <h1 style={{ ...typography.headingXL, margin: 0, marginBottom: spacing.md, color: colors.slate900 }}>Settings</h1>
-        <p style={{ ...typography.bodyLg, margin: 0, color: colors.slate500 }}>
-          Configure global defaults for operations and notifications.
+      <Card header="User invitations unavailable">
+        <p style={{ ...typography.bodyMd, color: colors.slate700, margin: 0 }}>
+          No invitation has been sent. User invitations will be enabled when Patrol Pro can
+          deliver single-use links securely and report their delivery status accurately.
         </p>
-      </div>
-
-      <Card header="Organization Settings">
-        <TextField label="Company Name" value={settingsForm.companyName} onChange={(v) => setSettingsForm({ ...settingsForm, companyName: v })} />
-        <TextField label="Default Shift Length (hours)" value={settingsForm.defaultShiftLength} onChange={(v) => setSettingsForm({ ...settingsForm, defaultShiftLength: v })} />
-        <TextField label="Incident Escalation (minutes)" value={settingsForm.incidentEscalationMinutes} onChange={(v) => setSettingsForm({ ...settingsForm, incidentEscalationMinutes: v })} />
-        <TextField label="Email Notifications" value={settingsForm.emailNotifications} onChange={(v) => setSettingsForm({ ...settingsForm, emailNotifications: v })} placeholder="enabled | disabled" />
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <Button onClick={saveSettings}>Save Settings</Button>
-        </div>
       </Card>
     </div>
   );
@@ -3266,19 +2894,37 @@ function AppInner() {
       case 'checkpoints':
         return <CheckpointsContent />;
       case 'reports':
-        return <ReportsContent />;
+        return <ReportsPage colors={colors} spacing={spacing} typography={typography} />;
       case 'analytics':
         return <AnalyticsContent />;
       case 'vehicles':
         return <VehiclesContent />;
-      case 'communications':
-        return <CommunicationsContent />;
-      case 'documents':
-        return <DocumentsContent />;
+      case 'customers':
+        return (
+          <CustomersPage
+            customers={customers}
+            customerForm={customerForm}
+            setCustomerForm={setCustomerForm}
+            showCreate={showCustomerModal}
+            setShowCreate={setShowCustomerModal}
+            showEdit={showEditCustomerModal}
+            closeEdit={closeEditCustomer}
+            showArchive={showArchiveCustomerModal}
+            closeArchive={closeArchiveCustomer}
+            loadCustomers={loadCustomers}
+            createCustomer={handleCreateCustomer}
+            updateCustomer={handleUpdateCustomer}
+            startEdit={startEditCustomer}
+            requestArchive={requestArchiveCustomer}
+            confirmArchive={confirmArchiveCustomer}
+            ui={{ Button, Card, EnterpriseTable, Modal, TextField }}
+            design={{ colors, spacing, typography }}
+          />
+        );
       case 'users':
         return <UsersContent />;
       case 'settings':
-        return <SettingsContent />;
+        return <SettingsPage colors={colors} spacing={spacing} typography={typography} />;
       default:
         return (
           <div>

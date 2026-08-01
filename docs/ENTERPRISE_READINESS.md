@@ -1,5 +1,7 @@
 # Patrol Pro enterprise readiness record
 
+Patrol Pro is an MVP intended for controlled demonstration and pilot evaluation. It is not currently approved as the sole system for live security operations.
+
 ## Decision and scope
 
 The supported SaaS path is the FastAPI, React, and PostgreSQL stack in
@@ -9,8 +11,8 @@ model and contains demonstration seed records. It must not be connected to the
 SaaS production database. Its data needs an explicit, rehearsed migration or a
 documented decommission decision.
 
-This change establishes the company and identity boundary. It does not claim
-that the whole repository is enterprise-production-ready.
+This change establishes the company and identity boundary. It does not
+establish enterprise operational readiness for the whole repository.
 
 ## Implemented foundation
 

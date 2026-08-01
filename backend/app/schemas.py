@@ -148,7 +148,7 @@ class EmployeeInvitationCreated(BaseModel):
     full_name: str
     role: UserRole
     expires_at: datetime
-    invitation_token: str
+    invitation_token: str | None = None
 
 
 class EmployeeInvitationAccept(BaseModel):

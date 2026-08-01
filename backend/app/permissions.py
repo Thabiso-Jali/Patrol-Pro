@@ -15,8 +15,8 @@ class Permission(StrEnum):
     CUSTOMERS_MANAGE = 'customers.manage'
     DEVICES_VIEW = 'devices.view'
     DEVICES_MANAGE = 'devices.manage'
-    COMMUNICATIONS_VIEW = 'communications.view'
-    COMMUNICATIONS_MANAGE = 'communications.manage'
+    NOTIFICATIONS_VIEW = 'notifications.view'
+    NOTIFICATIONS_MANAGE = 'notifications.manage'
     DOCUMENTS_VIEW = 'documents.view'
     DOCUMENTS_MANAGE = 'documents.manage'
     ANALYTICS_VIEW = 'analytics.view'
@@ -37,7 +37,7 @@ OPERATION_VIEW_PERMISSIONS = {
     Permission.PATROLS_VIEW,
     Permission.INCIDENTS_VIEW,
     Permission.CHECKPOINTS_VIEW,
-    Permission.COMMUNICATIONS_VIEW,
+    Permission.NOTIFICATIONS_VIEW,
     Permission.OPERATIONS_READ,
 }
 FIELD_OPERATION_PERMISSIONS = OPERATION_VIEW_PERMISSIONS | {
@@ -50,7 +50,7 @@ SUPERVISOR_PERMISSIONS = FIELD_OPERATION_PERMISSIONS | {
     Permission.PATROLS_MANAGE,
     Permission.INCIDENTS_MANAGE,
     Permission.CHECKPOINTS_MANAGE,
-    Permission.COMMUNICATIONS_MANAGE,
+    Permission.NOTIFICATIONS_MANAGE,
     Permission.CUSTOMERS_VIEW,
     Permission.CUSTOMERS_MANAGE,
     Permission.DEVICES_VIEW,

@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 
 import App, {
+  CHECKPOINT_CONFIRMATION_COPY,
+  checkpointStatusLabel,
   DashboardContent,
   MobileNavigation,
   SearchableMultiSelect,
@@ -148,6 +150,14 @@ test('dashboard API failure shows an error without fabricated figures', () => {
   expect(html).toContain('Dashboard statistics are unavailable. Please try again.');
   expect(html).not.toContain('>12<');
   expect(html).not.toContain('vs last week');
+});
+
+test('checkpoint terminology accurately describes the current assurance level', () => {
+  expect(CHECKPOINT_CONFIRMATION_COPY.action).toBe('Confirm Checkpoint Code');
+  expect(CHECKPOINT_CONFIRMATION_COPY.accepted).toBe('Checkpoint code accepted');
+  expect(CHECKPOINT_CONFIRMATION_COPY.assurance).toContain('Low-assurance');
+  expect(checkpointStatusLabel('verified')).toBe('Code accepted');
+  expect(checkpointStatusLabel('pending')).toBe('pending');
 });
 
 const staffingAvailability = {
@@ -346,6 +356,7 @@ test('officers page renders accepted operational users from the API', async () =
 
   expect(view.container.textContent).toContain('Accepted Employee');
   expect(view.container.textContent).toContain('employee@example.com');
+  expect(view.container.textContent).not.toContain('Add Officer');
   view.cleanup();
 });
 

@@ -24,7 +24,7 @@ def list_notifications(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_permissions(Permission.COMMUNICATIONS_VIEW)),
+    current_user: schemas.User = Depends(require_permissions(Permission.NOTIFICATIONS_VIEW)),
 ):
     return crud.get_notifications(
         db=db,
@@ -40,7 +40,7 @@ def list_notifications(
 def create_notification(
     notification: schemas.NotificationCreate,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_permissions(Permission.COMMUNICATIONS_MANAGE)),
+    current_user: schemas.User = Depends(require_permissions(Permission.NOTIFICATIONS_MANAGE)),
 ):
     created = crud.create_notification(
         db=db,
@@ -63,7 +63,7 @@ def create_notification(
 def mark_notification_read(
     notification_id: int,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(require_permissions(Permission.COMMUNICATIONS_VIEW)),
+    current_user: schemas.User = Depends(require_permissions(Permission.NOTIFICATIONS_VIEW)),
 ):
     notification = crud.mark_notification_read(
         db=db,

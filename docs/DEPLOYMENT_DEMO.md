@@ -1,5 +1,7 @@
 # Patrol Pro Render demo deployment
 
+Patrol Pro is an MVP intended for controlled demonstration and pilot evaluation. It is not currently approved as the sole system for live security operations.
+
 This guide prepares a disposable demonstration environment. It does not
 authorize creating services, changing DNS, or using real customer data.
 

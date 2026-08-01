@@ -64,7 +64,7 @@ def create_checkpoint(
     validate_patrol(db, checkpoint.patrol_id, current_user.organisation_id)
     validate_code(db, checkpoint.code, current_user.organisation_id)
     if checkpoint.status == 'verified':
-        raise HTTPException(status_code=422, detail='Checkpoints can only be verified through verification')
+        raise HTTPException(status_code=422, detail='Checkpoint codes can only be accepted through code confirmation')
     created = crud.create_checkpoint(
         db=db,
         checkpoint=checkpoint,
@@ -93,9 +93,9 @@ def update_checkpoint(
     if not checkpoint:
         raise HTTPException(status_code=404, detail='Checkpoint not found')
     if checkpoint.status == 'verified':
-        raise HTTPException(status_code=409, detail='Verified checkpoints cannot be edited')
+        raise HTTPException(status_code=409, detail='Code-confirmed checkpoints cannot be edited')
     if payload.status == 'verified':
-        raise HTTPException(status_code=422, detail='Use checkpoint verification to mark it verified')
+        raise HTTPException(status_code=422, detail='Use code confirmation to accept a checkpoint code')
     validate_patrol(db, payload.patrol_id, current_user.organisation_id)
     validate_code(db, payload.code, current_user.organisation_id, checkpoint_id)
     updated = crud.update_checkpoint(
@@ -127,7 +127,7 @@ def archive_checkpoint(
     if not checkpoint:
         raise HTTPException(status_code=404, detail='Checkpoint not found')
     if checkpoint.status == 'verified':
-        raise HTTPException(status_code=409, detail='Verified checkpoints must be retained for audit')
+        raise HTTPException(status_code=409, detail='Code-confirmed checkpoints must be retained for audit')
     crud.delete_checkpoint(db, checkpoint_id, current_user.id, current_user.organisation_id)
     log_audit_event(
         db,
@@ -152,9 +152,9 @@ def verify_checkpoint(
     if not checkpoint:
         raise HTTPException(status_code=404, detail='Checkpoint not found')
     if checkpoint.status == 'verified':
-        raise HTTPException(status_code=409, detail='Checkpoint is already verified')
+        raise HTTPException(status_code=409, detail='Checkpoint code has already been accepted')
     if checkpoint.status == 'inactive':
-        raise HTTPException(status_code=409, detail='Inactive checkpoints cannot be verified')
+        raise HTTPException(status_code=409, detail='Inactive checkpoints cannot accept a code')
     if payload.code and payload.code != checkpoint.code:
         raise HTTPException(status_code=400, detail='Checkpoint code does not match')
     if payload.nfc_tag and checkpoint.nfc_tag and payload.nfc_tag != checkpoint.nfc_tag:

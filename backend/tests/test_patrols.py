@@ -4,6 +4,7 @@ import unittest
 
 from fastapi.testclient import TestClient
 from backend.app.main import app
+from backend.tests.invitation_test_utils import post_development_invitation
 
 
 class PatrolFlowTest(unittest.TestCase):
@@ -27,7 +28,7 @@ class PatrolFlowTest(unittest.TestCase):
         self.assertEqual(token_response.status_code, 200)
         self.token = token_response.json()["access_token"]
         headers = {"Authorization": f"Bearer {self.token}"}
-        invitation = self.client.post("/api/v1/invitations", headers=headers, json={
+        invitation = post_development_invitation(self.client, headers=headers, json={
             "email": f"patrol-officer+{uuid.uuid4().hex}@example.com",
             "full_name": "Assigned Patrol Officer",
             "role": "employee",

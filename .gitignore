@@ -36,6 +36,9 @@
 *.md
 README*
 LICENSE
+!backend/README.md
+!frontend/README.md
+!php-app/README.md
 __pycache__/
 .pytest_cache/
 .venv/

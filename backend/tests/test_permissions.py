@@ -27,3 +27,10 @@ def test_enterprise_role_boundaries():
 def test_officer_and_employee_are_canonical_operational_roles():
     assert canonical_role('officer') == 'officer'
     assert permissions_for_role('officer') == permissions_for_role('employee')
+
+
+def test_removed_communications_ui_does_not_leave_misleading_permissions():
+    permission_values = {permission.value for permission in Permission}
+    assert 'communications.view' not in permission_values
+    assert 'communications.manage' not in permission_values
+    assert Permission.NOTIFICATIONS_VIEW in permissions_for_role('employee')

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
+from backend.tests.invitation_test_utils import post_development_invitation
 
 
 client = TestClient(app)
@@ -29,7 +30,7 @@ def create_token(prefix: str):
     )
     assert token_response.status_code == 200
     headers = {"Authorization": f"Bearer {token_response.json()['access_token']}"}
-    invitation = client.post("/api/v1/invitations", headers=headers, json={
+    invitation = post_development_invitation(client, headers=headers, json={
         "email": f"{prefix}-officer+{uuid.uuid4().hex}@example.com",
         "full_name": "Tenant Officer",
         "role": "employee",

@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     ACCOUNT_LOCK_MAX_FAILURES: int = 5
     ACCOUNT_LOCK_MINUTES: int = 15
     EMPLOYEE_INVITATION_EXPIRE_HOURS: int = 72
+    EXPOSE_DEVELOPMENT_INVITATION_TOKENS: bool = False
 
     CORS_ORIGINS: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000"],
@@ -103,6 +104,10 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_environment_safety(self) -> "Settings":
         if self.APP_ENV in {"demo", "production"}:
+            if self.EXPOSE_DEVELOPMENT_INVITATION_TOKENS:
+                raise ValueError(
+                    "EXPOSE_DEVELOPMENT_INVITATION_TOKENS can only be enabled in development"
+                )
             if not self.DATABASE_URL.startswith("postgresql+psycopg://"):
                 raise ValueError("DATABASE_URL must use PostgreSQL when APP_ENV is demo or production")
             if (
@@ -135,6 +140,13 @@ class Settings(BaseSettings):
     @property
     def API_TITLE(self) -> str:
         return self.APP_NAME
+
+    @property
+    def expose_invitation_tokens(self) -> bool:
+        return (
+            self.APP_ENV == "development"
+            and self.EXPOSE_DEVELOPMENT_INVITATION_TOKENS
+        )
 
     def validate_production_safety(self) -> None:
         """Retained for callers; validation now occurs while settings load."""

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.database import engine
 from backend.app.main import app
+from backend.tests.invitation_test_utils import post_development_invitation
 
 client = TestClient(app)
 
@@ -29,7 +30,7 @@ def register_owner():
 
 def invite_and_accept(headers, name):
     email = f'{name.lower().replace(" ", "-")}+{uuid.uuid4().hex}@example.com'
-    invitation = client.post('/api/v1/invitations', headers=headers, json={
+    invitation = post_development_invitation(client, headers=headers, json={
         'full_name': name,
         'email': email,
         'role': 'employee',

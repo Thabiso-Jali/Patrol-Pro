@@ -5,6 +5,8 @@
 **Audience:** Engineers, reviewers, architects, security engineers, product engineers, and release managers
 **Last reviewed:** 30 July 2026
 
+Patrol Pro is an MVP intended for controlled demonstration and pilot evaluation. It is not currently approved as the sole system for live security operations.
+
 This is not user documentation. It defines the minimum standard for every new Patrol Pro feature and every material change to an existing feature.
 
 The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are requirements:

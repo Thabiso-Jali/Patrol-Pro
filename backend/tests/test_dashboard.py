@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
+from backend.tests.invitation_test_utils import post_development_invitation
 
 
 client = TestClient(app)
@@ -51,8 +52,8 @@ def create_active_patrol(headers, name: str, officer_id: int):
 
 def create_officer(headers, name="Dashboard Officer"):
     officer_email = f"officer+{uuid.uuid4().hex}@example.com"
-    invitation_response = client.post(
-        "/api/v1/invitations",
+    invitation_response = post_development_invitation(
+        client,
         json={"email": officer_email, "full_name": name, "role": "employee"},
         headers=headers,
     )

@@ -29,7 +29,6 @@ test('administrator navigation excludes company-owner settings without company p
     PERMISSIONS.ANALYTICS_VIEW,
     PERMISSIONS.DEVICES_VIEW,
     PERMISSIONS.CUSTOMERS_VIEW,
-    PERMISSIONS.DOCUMENTS_VIEW,
   ];
   expect(ids(administrator)).toContain('users');
   expect(ids(administrator)).not.toContain('settings');
@@ -49,8 +48,14 @@ test.each(['officer', 'employee'])('%s operational permissions never produce an 
     'my-team',
     'incidents',
     'checkpoints',
-    'communications',
   ]);
+});
+
+test('customers are named truthfully and communications are not exposed', () => {
+  const navigation = NAV_ITEMS.map((item) => ({ id: item.id, label: item.label }));
+  expect(navigation).toContainEqual({ id: 'customers', label: 'Customers' });
+  expect(navigation.some((item) => item.id === 'documents')).toBe(false);
+  expect(navigation.some((item) => item.id === 'communications')).toBe(false);
 });
 
 test('manual page access is denied when its permission is absent', () => {

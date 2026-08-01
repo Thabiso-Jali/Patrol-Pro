@@ -25,7 +25,12 @@ def get_db():
         db.close()
 
 
-@router.post('', response_model=schemas.EmployeeInvitationCreated, status_code=status.HTTP_201_CREATED)
+@router.post(
+    '',
+    response_model=schemas.EmployeeInvitationCreated,
+    response_model_exclude_none=True,
+    status_code=status.HTTP_201_CREATED,
+)
 def invite_employee(
     request: Request,
     payload: schemas.EmployeeInvitationCreate,
@@ -72,14 +77,16 @@ def invite_employee(
     )
     db.commit()
     db.refresh(invitation)
-    return {
+    response = {
         'id': invitation.id,
         'email': invitation.email,
         'full_name': invitation.full_name,
         'role': invitation.role,
         'expires_at': invitation.expires_at,
-        'invitation_token': raw_token,
     }
+    if settings.expose_invitation_tokens:
+        response['invitation_token'] = raw_token
+    return response
 
 
 @router.post('/accept', response_model=schemas.User, status_code=status.HTTP_201_CREATED)

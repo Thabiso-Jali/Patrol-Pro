@@ -23,9 +23,7 @@ export const NAV_ITEMS = Object.freeze([
   { id: 'reports', label: 'Reports', icon: 'reports', permissions: [PERMISSIONS.REPORTS_VIEW] },
   { id: 'analytics', label: 'Analytics', icon: 'analytics', permissions: [PERMISSIONS.ANALYTICS_VIEW] },
   { id: 'vehicles', label: 'Vehicles', icon: 'vehicles', permissions: [PERMISSIONS.DEVICES_VIEW] },
-  // These screens currently use the alerts and customers APIs respectively.
-  { id: 'communications', label: 'Communications', icon: 'communications', permissions: [PERMISSIONS.INCIDENTS_VIEW] },
-  { id: 'documents', label: 'Documents', icon: 'documents', permissions: [PERMISSIONS.CUSTOMERS_VIEW] },
+  { id: 'customers', label: 'Customers', icon: 'customers', permissions: [PERMISSIONS.CUSTOMERS_VIEW] },
   { id: 'users', label: 'Users', icon: 'users', permissions: [PERMISSIONS.USERS_VIEW] },
   { id: 'settings', label: 'Company Settings', icon: 'settings', permissions: [PERMISSIONS.COMPANY_MANAGE] },
 ]);
