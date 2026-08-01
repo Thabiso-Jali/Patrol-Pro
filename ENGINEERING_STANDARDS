@@ -171,6 +171,16 @@ The backend MUST enforce:
 - Large migrations MUST account for locks, backfills, deployment ordering, and backward compatibility.
 - Schema design SHOULD allow likely enterprise expansion without embedding hypothetical fields or duplicating current data.
 
+### Canonical domain ownership
+
+- Every domain model MUST declare its aggregate root and canonical owning service.
+- A service MUST NOT mutate a model outside its aggregate. Cross-aggregate work MUST use the owning service's public interface and one explicit transaction coordinator.
+- Evidence, operational events, notifications, and future polymorphic features MUST reference the shared Domain Object Registry. They MUST NOT create independent `parent_type` registries.
+- Domain object types form a closed backend-controlled set. Clients MUST NOT supply arbitrary model or table names.
+- Operational Events are an append-only event store and the source for entity timelines. Business history MUST NOT be copied into feature-specific history tables.
+- Activated, published, completed, delivered, or otherwise operational records MUST be immutable where their state contract declares them immutable. Corrections, amendments, revisions, and supersession MUST preserve the original.
+- Every stateful operational aggregate MUST define legal transitions centrally. Accepting a known state value does not imply that every transition to that value is valid.
+
 ---
 
 ## 5. API Standards

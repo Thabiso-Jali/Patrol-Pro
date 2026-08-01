@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from .... import crud, schemas
 from ....database import SessionLocal
+from ....domain.states import InvalidStateTransition, assert_mutable, assert_transition
 from ....permissions import Permission
 from ....security import require_permissions
 from ....services.audit import log_audit_event
@@ -64,6 +65,7 @@ def create_alert(
         alert=alert,
         actor_user_id=current_user.id,
         organisation_id=current_user.organisation_id,
+        commit=False,
     )
     crud.create_notification(
         db=db,
@@ -75,13 +77,14 @@ def create_alert(
         ),
         actor_user_id=current_user.id,
         organisation_id=current_user.organisation_id,
+        commit=False,
     )
     log_audit_event(
         db,
         actor_user_id=current_user.id,
         actor_email=current_user.email,
         action='alert.create',
-        entity_type='alert',
+        entity_type='incident',
         entity_id=str(created.id),
     )
     return created
@@ -98,17 +101,13 @@ def update_alert(
     db_alert = crud.get_alert(db=db, alert_id=alert_id, organisation_id=current_user.organisation_id)
     if not db_alert:
         raise HTTPException(status_code=404, detail='Alert not found')
-    allowed_transitions = {
-        'open': {'open', 'investigating', 'resolved', 'cancelled'},
-        'investigating': {'investigating', 'resolved', 'cancelled'},
-        'resolved': {'resolved'},
-        'cancelled': {'cancelled'},
-    }
-    if alert_update.status.value not in allowed_transitions.get(db_alert.status, {db_alert.status}):
-        raise HTTPException(
-            status_code=409,
-            detail=f'Incident cannot move from {db_alert.status} to {alert_update.status.value}',
-        )
+    try:
+        if alert_update.status.value == db_alert.status:
+            assert_mutable('incident', db_alert.status)
+        else:
+            assert_transition('incident', db_alert.status, alert_update.status.value)
+    except InvalidStateTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     validate_alert_references(db, alert_update, current_user.organisation_id)
     updated = crud.update_alert(
         db=db,
@@ -116,13 +115,14 @@ def update_alert(
         alert_update=alert_update,
         actor_user_id=current_user.id,
         organisation_id=current_user.organisation_id,
+        commit=False,
     )
     log_audit_event(
         db,
         actor_user_id=current_user.id,
         actor_email=current_user.email,
         action='alert.update',
-        entity_type='alert',
+        entity_type='incident',
         entity_id=str(alert_id),
     )
     return updated
@@ -143,13 +143,14 @@ def delete_alert(
         alert_id=alert_id,
         actor_user_id=current_user.id,
         organisation_id=current_user.organisation_id,
+        commit=False,
     )
     log_audit_event(
         db,
         actor_user_id=current_user.id,
         actor_email=current_user.email,
         action='alert.delete',
-        entity_type='alert',
+        entity_type='incident',
         entity_id=str(alert_id),
     )
     return {'message': 'Alert deleted successfully', 'id': alert_id}

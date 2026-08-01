@@ -54,6 +54,7 @@ def create_customer(
         customer=customer,
         actor_user_id=current_user.id,
         organisation_id=current_user.organisation_id,
+        commit=False,
     )
     log_audit_event(
         db,
@@ -83,6 +84,7 @@ def update_customer(
         customer_update=customer_update,
         actor_user_id=current_user.id,
         organisation_id=current_user.organisation_id,
+        commit=False,
     )
     log_audit_event(
         db,
@@ -110,6 +112,7 @@ def delete_customer(
         customer_id=customer_id,
         actor_user_id=current_user.id,
         organisation_id=current_user.organisation_id,
+        commit=False,
     )
     log_audit_event(
         db,

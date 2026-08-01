@@ -71,3 +71,5 @@ php-app/deploy/*.md
 docs/*
 !docs/DEPLOYMENT_DEMO.md
 !docs/ENTERPRISE_READINESS.md
+!docs/CANONICAL_DOMAIN_MODEL.md
+!docs/PHASE1_API_COMPATIBILITY.md

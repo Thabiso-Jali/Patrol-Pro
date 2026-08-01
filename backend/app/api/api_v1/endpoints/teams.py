@@ -5,9 +5,11 @@ from sqlalchemy.orm import Session
 
 from .... import models, schemas
 from ....database import SessionLocal
+from ....domain.registry import DomainObjectType
 from ....permissions import Permission
 from ....security import require_permissions
 from ....services.audit import log_audit_event
+from ....services.domain_registry import register_domain_object
 from ....services.staffing import (
     assignment_context,
     operational_users,
@@ -329,6 +331,10 @@ def create_team(
     )
     db.add(team)
     db.flush()
+    register_domain_object(
+        db, organisation_id=current_user.organisation_id,
+        object_type=DomainObjectType.TEAM, object_id=team.id,
+    )
     replace_members(db, team, payload.member_user_ids, current_user.id)
     log_audit_event(
         db,

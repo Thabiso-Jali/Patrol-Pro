@@ -6,6 +6,7 @@ from ....database import SessionLocal
 from ....permissions import Permission
 from ....security import require_permissions
 from ....services.audit import log_audit_event
+from ....services.employees import employee_for_user
 
 router = APIRouter()
 
@@ -166,7 +167,26 @@ def verify_checkpoint(
         payload=payload,
         actor_user_id=current_user.id,
         organisation_id=current_user.organisation_id,
+        commit=False,
     )
+    employee = employee_for_user(
+        db,
+        organisation_id=current_user.organisation_id,
+        user_id=current_user.id,
+    )
+    if employee is None:
+        raise HTTPException(status_code=409, detail='Operational employee profile is unavailable')
+    db.add(models.CheckpointVerificationEvent(
+        organisation_id=current_user.organisation_id,
+        checkpoint_id=checkpoint.id,
+        patrol_occurrence_id=checkpoint.patrol_id,
+        employee_id=employee.id,
+        occurred_at=verified.verified_at,
+        verification_method='nfc' if payload.nfc_tag else 'code',
+        result='accepted',
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+    ))
     log_audit_event(
         db,
         actor_user_id=current_user.id,

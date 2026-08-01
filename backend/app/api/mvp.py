@@ -88,7 +88,7 @@ def create_patrol_log(
         actor_email=current_user.email,
         action='patrol_log.create',
         entity_type='patrol_log',
-        entity_id=str(created.id),
+        entity_id=str(created['id']),
     )
     return created
 

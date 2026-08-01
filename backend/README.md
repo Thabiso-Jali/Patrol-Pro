@@ -1,5 +1,10 @@
 # Patrol Pro Backend
 
+The canonical Phase 1 ownership model, aggregate boundaries and compatibility
+rules are defined in [`../docs/CANONICAL_DOMAIN_MODEL.md`](../docs/CANONICAL_DOMAIN_MODEL.md)
+and [`../docs/PHASE1_API_COMPATIBILITY.md`](../docs/PHASE1_API_COMPATIBILITY.md).
+Models without a complete workflow intentionally have no public API.
+
 Patrol Pro is an MVP intended for controlled demonstration and pilot evaluation. It is not currently approved as the sole system for live security operations.
 
 This FastAPI backend provides the current authenticated, organisation-scoped
