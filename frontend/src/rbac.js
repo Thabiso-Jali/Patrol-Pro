@@ -10,10 +10,12 @@ export const PERMISSIONS = Object.freeze({
   USERS_VIEW: 'users.view',
   COMPANY_MANAGE: 'company.manage',
   TEAMS_VIEW: 'teams.view',
+  OPERATIONS_WORKSPACE_VIEW: 'operations.workspace.view',
 });
 
 export const NAV_ITEMS = Object.freeze([
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', permissions: [PERMISSIONS.DASHBOARD_VIEW] },
+  { id: 'operations', label: 'Operations', icon: 'operations', permissions: [PERMISSIONS.OPERATIONS_WORKSPACE_VIEW], path: '/operations' },
   { id: 'patrols', label: 'Patrols', icon: 'patrols', permissions: [PERMISSIONS.PATROLS_VIEW] },
   { id: 'officers', label: 'Officers', icon: 'officers', permissions: [PERMISSIONS.USERS_VIEW] },
   { id: 'teams', label: 'Teams', icon: 'users', permissions: [PERMISSIONS.USERS_VIEW, PERMISSIONS.TEAMS_VIEW] },
@@ -27,6 +29,14 @@ export const NAV_ITEMS = Object.freeze([
   { id: 'users', label: 'Users', icon: 'users', permissions: [PERMISSIONS.USERS_VIEW] },
   { id: 'settings', label: 'Company Settings', icon: 'settings', permissions: [PERMISSIONS.COMPANY_MANAGE] },
 ]);
+
+export const pageFromPath = (pathname) => (
+  NAV_ITEMS.find((item) => item.path === pathname)?.id || 'dashboard'
+);
+
+export const pathForPage = (pageId) => (
+  NAV_ITEMS.find((item) => item.id === pageId)?.path || '/'
+);
 
 export const hasPermission = (grantedPermissions, requiredPermission) => (
   new Set(grantedPermissions || []).has(requiredPermission)

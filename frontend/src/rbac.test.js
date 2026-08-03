@@ -35,8 +35,10 @@ test('administrator navigation excludes company-owner settings without company p
 });
 
 test('manager and supervisor navigation is derived only from granted permissions', () => {
-  const manager = [...operational, PERMISSIONS.USERS_VIEW, PERMISSIONS.REPORTS_VIEW];
-  const supervisor = [...operational, PERMISSIONS.REPORTS_VIEW];
+  const manager = [...operational, PERMISSIONS.OPERATIONS_WORKSPACE_VIEW, PERMISSIONS.USERS_VIEW, PERMISSIONS.REPORTS_VIEW];
+  const supervisor = [...operational, PERMISSIONS.OPERATIONS_WORKSPACE_VIEW, PERMISSIONS.REPORTS_VIEW];
+  expect(ids(manager)).toContain('operations');
+  expect(ids(supervisor)).toContain('operations');
   expect(ids(manager)).toContain('users');
   expect(ids(supervisor)).not.toContain('users');
 });
@@ -49,6 +51,11 @@ test.each(['officer', 'employee'])('%s operational permissions never produce an 
     'incidents',
     'checkpoints',
   ]);
+});
+
+test('officers and employees do not receive management staffing visibility', () => {
+  expect(ids(operational)).not.toContain('operations');
+  expect(canAccessPage('operations', operational)).toBe(false);
 });
 
 test('customers are named truthfully and communications are not exposed', () => {

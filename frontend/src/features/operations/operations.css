@@ -1,0 +1,50 @@
+.operations-workspace { display: grid; gap: 24px; max-width: 1440px; margin: 0 auto; }
+.operations-header, .operations-section-heading, .operations-team-title { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.operations-header h1, .operations-workspace h2, .operations-workspace h3 { margin: 0; color: var(--pp-operations-text, #172033); }
+.operations-header p, .operations-section-heading p { margin: 6px 0 0; color: #64748b; }
+.operations-eyebrow { font-weight: 700; text-transform: uppercase; letter-spacing: .08em; font-size: .75rem; color: #c83265 !important; }
+.operations-refresh { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; color: #64748b; font-size: .875rem; }
+.operations-workspace button { min-height: 44px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #334155; font-weight: 650; }
+.operations-workspace button:focus-visible, .operations-workspace input:focus-visible, .operations-workspace select:focus-visible { outline: 3px solid #be185d; outline-offset: 2px; }
+.operations-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 12px; }
+.operations-metric, .operations-team, .operations-list, .operations-filters, .operations-state, .operations-actions, .operations-definition, .operations-empty { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }
+.operations-metric { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.operations-metric span { color: #64748b; font-size: .875rem; }
+.operations-metric strong { font-size: 1.75rem; color: #172033; }
+.operations-definition { padding: 12px 16px; color: #475569; margin: -12px 0 0; }
+.operations-actions { display: flex; align-items: center; gap: 12px; padding: 12px; }
+.operations-actions p { margin: 0; color: #64748b; }
+.operations-filters { padding: 16px; }
+.operations-filter-grid { display: grid; grid-template-columns: minmax(210px, 2fr) repeat(4, minmax(140px, 1fr)); gap: 12px; margin-top: 16px; }
+.operations-filter { display: flex; flex-direction: column; gap: 6px; color: #475569; font-weight: 600; font-size: .875rem; }
+.operations-filter input, .operations-filter select { min-height: 44px; width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; background: #fff; color: #172033; }
+.operations-list { overflow: hidden; }
+.operations-staff-row { min-height: 76px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #e2e8f0; }
+.operations-staff-row:last-child { border-bottom: 0; }
+.operations-staff-row p, .operations-staff-state p { margin: 5px 0 0; color: #64748b; }
+.operations-staff-state { text-align: right; }
+.operations-status { display: inline-flex; flex-shrink: 0; white-space: nowrap; padding: 5px 9px; border-radius: 999px; font-size: .8rem; font-weight: 700; text-transform: capitalize; background: #e2e8f0; color: #334155; }
+.operations-status--available, .operations-status--active { background: #dcfce7; color: #166534; }
+.operations-status--deployed { background: #fef3c7; color: #92400e; }
+.operations-status--inactive { background: #f1f5f9; color: #475569; }
+.operations-team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 14px; }
+.operations-team { padding: 16px; }
+.operations-team dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; }
+.operations-team dl div { background: #f8fafc; border-radius: 8px; padding: 10px; }
+.operations-team dt { color: #64748b; font-size: .78rem; }
+.operations-team dd { margin: 4px 0 0; font-weight: 700; }
+.operations-team p { color: #475569; }
+.operations-warning { color: #92400e !important; font-weight: 650; }
+.operations-read-only { color: #64748b; }
+.operations-empty, .operations-state { padding: 24px; }
+.operations-state--error { border-color: #fecaca; }
+.operations-link-button { white-space: nowrap; }
+@media (max-width: 900px) { .operations-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) {
+  .operations-header, .operations-section-heading, .operations-staff-row { flex-direction: column; align-items: stretch; }
+  .operations-refresh, .operations-staff-state { align-items: stretch; text-align: left; }
+  .operations-filter-grid { grid-template-columns: 1fr; }
+  .operations-actions { flex-direction: column; align-items: stretch; }
+  .operations-team-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 360px) { .operations-team dl { grid-template-columns: 1fr; } }

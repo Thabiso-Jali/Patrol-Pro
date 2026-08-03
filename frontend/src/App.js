@@ -2,9 +2,11 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { lightTokens, darkTokens, spacing, radius, typography, shadows, transitions } from './theme';
 import { API_BASE_URL } from './apiConfig';
 import { canAccessPage, visibleNavigation } from './rbac';
+import { usePageNavigation } from './routing';
 import CustomersPage from './features/customers/CustomersPage';
 import ReportsPage from './features/reports/ReportsPage';
 import SettingsPage from './features/settings/SettingsPage';
+import OperationsWorkspacePage from './features/operations/OperationsWorkspacePage';
 
 const API_BASE = API_BASE_URL;
 
@@ -42,7 +44,7 @@ const Icon = ({ name, size = 20, color }) => {
   const { colors } = useTheme();
   const resolvedColor = color || colors.slate700;
   const icons = {
-    dashboard: '📊', patrols: '🚶', officers: '👮', incidents: '⚠️',
+    dashboard: '📊', operations: '◉', patrols: '🚶', officers: '👮', incidents: '⚠️',
     checkpoints: '📍', reports: '📋', analytics: '📈', vehicles: '🚗',
     customers: '🏢', users: '👥', settings: '⚙️',
     home: '🏠', menu: '☰', x: '✕', search: '🔍', bell: '🔔',
@@ -1274,7 +1276,6 @@ const PatrolsContent = ({
 
 function AppInner() {
   const { colors, dark, toggle } = useTheme();
-  const [activeNav, setActiveNav] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [token, setToken] = useState('');
@@ -2041,6 +2042,7 @@ function AppInner() {
   const permissions = useMemo(() => authContext?.permissions || [], [authContext]);
   const visibleNavItems = useMemo(() => visibleNavigation(permissions), [permissions]);
   const isAuthenticated = Boolean(token && authContext);
+  const { activeNav, navigateToPage } = usePageNavigation(isAuthenticated, visibleNavItems);
   const activePageLabel = visibleNavItems.find((item) => item.id === activeNav)?.label || 'PatrolPro';
   const closeMobileNav = useCallback(() => {
     setMobileNavOpen(false);
@@ -2059,14 +2061,6 @@ function AppInner() {
       notify('Logged out');
     }
   };
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const activeExists = visibleNavItems.some((item) => item.id === activeNav);
-    if (!activeExists && visibleNavItems.length > 0) {
-      setActiveNav(visibleNavItems[0].id);
-    }
-  }, [isAuthenticated, activeNav, visibleNavItems]);
 
   useEffect(() => {
     const desktopQuery = window.matchMedia('(min-width: 1024px)');
@@ -2103,7 +2097,7 @@ function AppInner() {
           <button
             key={item.id}
             aria-current={activeNav === item.id ? 'page' : undefined}
-            onClick={() => setActiveNav(item.id)}
+            onClick={() => navigateToPage(item.id)}
             style={{
               width: '100%', padding: spacing.md, marginBottom: spacing.sm,
               background: activeNav === item.id ? colors.rosePink : 'transparent',
@@ -2864,6 +2858,7 @@ function AppInner() {
     switch (activeNav) {
       case 'dashboard':
         return <DashboardContent stats={dashboardStats} isLoading={dashboardLoading} error={dashboardError} />;
+      case 'operations': return <OperationsWorkspacePage apiCall={apiCall} permissions={permissions} onNavigate={navigateToPage} />;
       case 'patrols':
         return (
           <PatrolsContent 
@@ -2956,7 +2951,7 @@ function AppInner() {
           open={mobileNavOpen}
           items={visibleNavItems}
           activeNav={activeNav}
-          onSelect={setActiveNav}
+          onSelect={navigateToPage}
           onClose={closeMobileNav}
           onLogout={handleLogout}
         />

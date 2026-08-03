@@ -33,6 +33,19 @@ const emptyStats = {
   todays_schedule: [],
 };
 
+const emptyOperationsWorkspace = {
+  as_of: '2026-08-03T12:00:00Z',
+  availability_definition: 'Assignment availability only; it does not represent presence.',
+  metric_definitions: {},
+  metrics: {
+    active_workforce: 0, available_workforce: 0, deployed_workforce: 0,
+    inactive_workforce: 0, workforce_without_team: 0, active_teams: 0,
+    active_patrols: 0,
+  },
+  staff: [],
+  teams: [],
+};
+
 const mobileItems = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
   { id: 'patrols', label: 'Patrols', icon: 'patrols' },
@@ -429,4 +442,50 @@ test('an expired access token clears protected content safely', async () => {
   expect(view.container.querySelector('.pp-desktop-sidebar')).toBeNull();
   expect(view.container.textContent).toContain('Sign In');
   view.cleanup();
+});
+
+test('direct Operations route waits for login and then renders for authorised management users', async () => {
+  window.history.replaceState({}, '', '/operations');
+  global.fetch = jest.fn((url) => {
+    if (url.endsWith('/auth/token')) return Promise.resolve(jsonResponse({ access_token: 'token', refresh_token: 'refresh' }));
+    if (url.endsWith('/auth/me')) return Promise.resolve(jsonResponse({
+      user: { id: 1, email: 'manager@example.com', role: 'manager' },
+      company: { id: 1, name: 'Test Company' },
+      role: 'manager',
+      permissions: ['operations.workspace.view'],
+    }));
+    if (url.endsWith('/operations/workspace')) return Promise.resolve(jsonResponse(emptyOperationsWorkspace));
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const view = renderInteractive(<App />);
+  expect(view.container.textContent).toContain('Sign In');
+  expect(view.container.textContent).not.toContain('Staffing summary');
+  await submitLogin(view);
+  await flushPromises();
+  expect(view.container.textContent).toContain('Operations Workspace');
+  expect(view.container.textContent).toContain('No operational workforce records');
+  view.cleanup();
+  window.history.replaceState({}, '', '/');
+});
+
+test('direct Operations route denies users without workspace permission without content flash', async () => {
+  window.history.replaceState({}, '', '/operations');
+  global.fetch = jest.fn((url) => {
+    if (url.endsWith('/auth/token')) return Promise.resolve(jsonResponse({ access_token: 'token', refresh_token: 'refresh' }));
+    if (url.endsWith('/auth/me')) return Promise.resolve(jsonResponse({
+      user: { id: 2, email: 'employee@example.com', role: 'employee' },
+      company: { id: 1, name: 'Test Company' },
+      role: 'employee',
+      permissions: [],
+    }));
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const view = renderInteractive(<App />);
+  await submitLogin(view);
+  await flushPromises();
+  expect(view.container.textContent).toContain('Access denied');
+  expect(view.container.textContent).not.toContain('Staffing summary');
+  expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/operations/workspace'), expect.anything());
+  view.cleanup();
+  window.history.replaceState({}, '', '/');
 });

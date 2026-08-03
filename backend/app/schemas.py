@@ -449,6 +449,51 @@ class OperationsSummary(BaseModel):
     recent_activity: list[AuditLog]
 
 
+class OperationsWorkspaceStaff(BaseModel):
+    id: int
+    full_name: str | None
+    staff_identifier: str
+    role: UserRole
+    account_status: str
+    availability_status: str
+    team_id: int | None = None
+    team_name: str | None = None
+    current_patrols: list[str] = Field(default_factory=list)
+
+
+class OperationsWorkspaceTeam(BaseModel):
+    id: int
+    name: str
+    status: str
+    leader_user_id: int | None = None
+    leader_name: str | None = None
+    active_member_count: int
+    inactive_member_count: int
+    available_member_count: int
+    deployed_member_count: int
+    current_patrols: list[str] = Field(default_factory=list)
+    attention: list[str] = Field(default_factory=list)
+
+
+class OperationsWorkspaceMetrics(BaseModel):
+    active_workforce: int
+    available_workforce: int
+    deployed_workforce: int
+    inactive_workforce: int
+    workforce_without_team: int
+    active_teams: int
+    active_patrols: int
+
+
+class OperationsWorkspace(BaseModel):
+    as_of: datetime
+    availability_definition: str
+    metric_definitions: dict[str, str]
+    metrics: OperationsWorkspaceMetrics
+    staff: list[OperationsWorkspaceStaff]
+    teams: list[OperationsWorkspaceTeam]
+
+
 class DashboardActivity(BaseModel):
     action: str
     entity_type: str

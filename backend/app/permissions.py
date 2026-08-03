@@ -27,6 +27,7 @@ class Permission(StrEnum):
     USERS_MANAGE = 'users.manage'
     USERS_INVITE = 'users.invite'
     OPERATIONS_READ = 'operations.read'
+    OPERATIONS_WORKSPACE_VIEW = 'operations.workspace.view'
     OPERATIONS_WRITE = 'operations.write'
     REPORTS_READ = 'reports.read'
     AUDIT_READ = 'audit.read'
@@ -47,6 +48,7 @@ FIELD_OPERATION_PERMISSIONS = OPERATION_VIEW_PERMISSIONS | {
     Permission.TEAMS_VIEW,
 }
 SUPERVISOR_PERMISSIONS = FIELD_OPERATION_PERMISSIONS | {
+    Permission.OPERATIONS_WORKSPACE_VIEW,
     Permission.PATROLS_MANAGE,
     Permission.INCIDENTS_MANAGE,
     Permission.CHECKPOINTS_MANAGE,

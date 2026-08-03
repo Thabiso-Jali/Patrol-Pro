@@ -16,12 +16,16 @@ def test_enterprise_role_boundaries():
     assert Permission.USERS_INVITE in manager
     assert Permission.USERS_MANAGE not in manager
     assert Permission.REPORTS_READ in supervisor
+    assert Permission.OPERATIONS_WORKSPACE_VIEW in administrator
+    assert Permission.OPERATIONS_WORKSPACE_VIEW in manager
+    assert Permission.OPERATIONS_WORKSPACE_VIEW in supervisor
     assert Permission.USERS_INVITE not in supervisor
     assert Permission.PATROLS_MANAGE in supervisor
     assert Permission.AUDIT_READ in supervisor
     assert Permission.INCIDENTS_CREATE in employee
     assert Permission.PATROLS_MANAGE not in employee
     assert Permission.REPORTS_READ not in employee
+    assert Permission.OPERATIONS_WORKSPACE_VIEW not in employee
 
 
 def test_officer_and_employee_are_canonical_operational_roles():
