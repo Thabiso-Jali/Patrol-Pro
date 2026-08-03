@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from .. import models
+from .tenant_validation import aggregate_mutation
 
 
 def log_audit_event(
@@ -14,7 +15,6 @@ def log_audit_event(
     ip_address: str | None = None,
     detail: str | None = None,
     organisation_id: int | None = None,
-    commit: bool = True,
 ) -> None:
     if organisation_id is None and actor_user_id is not None:
         organisation_id = (
@@ -51,6 +51,6 @@ def log_audit_event(
         detail=detail,
         organisation_id=organisation_id,
     )
-    db.add(entry)
-    if commit:
-        db.commit()
+    with aggregate_mutation(db, 'operational_events'):
+        db.add(entry)
+        db.flush()

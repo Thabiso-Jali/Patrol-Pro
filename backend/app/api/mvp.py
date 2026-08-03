@@ -9,6 +9,7 @@ from ..database import SessionLocal
 from ..permissions import Permission
 from ..security import authenticate_user, create_access_token, create_refresh_token, get_current_user, require_permissions
 from ..services.audit import log_audit_event
+from ..services.transactions import transactional, transactional_session
 
 router = APIRouter()
 settings = get_settings()
@@ -36,7 +37,22 @@ def register_user(request: Request, payload: schemas.MVPRegisterRequest, db: Ses
 
 @router.post('/login', response_model=schemas.Token)
 def login_user(request: Request, payload: schemas.MVPLoginRequest, db: Session = Depends(get_db)):
-    user = authenticate_user(db, payload.email, payload.password)
+    with transactional(db, owner='mvp.login'):
+        user = authenticate_user(db, payload.email, payload.password)
+        if user:
+            company = db.query(models.Organisation).filter(
+                models.Organisation.id == user.organisation_id,
+            ).one()
+            log_audit_event(
+                db,
+                actor_user_id=user.id,
+                actor_email=user.email,
+                organisation_id=user.organisation_id,
+                action='auth.login',
+                entity_type='user',
+                entity_id=str(user.id),
+                ip_address=request.client.host if request.client else None,
+            )
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -44,19 +60,8 @@ def login_user(request: Request, payload: schemas.MVPLoginRequest, db: Session =
             headers={'WWW-Authenticate': 'Bearer'},
         )
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    company = db.query(models.Organisation).filter(models.Organisation.id == user.organisation_id).one()
     access_token = create_access_token(user, company, expires_delta=access_token_expires)
     refresh_token = create_refresh_token(user, company)
-    log_audit_event(
-        db,
-        actor_user_id=user.id,
-        actor_email=user.email,
-        organisation_id=user.organisation_id,
-        action='auth.login',
-        entity_type='user',
-        entity_id=str(user.id),
-        ip_address=request.client.host if request.client else None,
-    )
     return {
         'access_token': access_token,
         'refresh_token': refresh_token,
@@ -73,7 +78,7 @@ def get_user(current_user=Depends(get_current_user)):
 @router.post('/patrol', response_model=schemas.PatrolLog)
 def create_patrol_log(
     payload: schemas.PatrolLogCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user=Depends(require_permissions(Permission.OPERATIONS_WRITE)),
 ):
     created = crud.create_patrol_log(
@@ -88,7 +93,7 @@ def create_patrol_log(
         actor_email=current_user.email,
         action='patrol_log.create',
         entity_type='patrol_log',
-        entity_id=str(created['id']),
+        entity_id=str(created.id),
     )
     return created
 
@@ -111,7 +116,7 @@ def list_patrol_logs(
 @router.post('/incidents', response_model=schemas.Incident)
 def create_incident(
     payload: schemas.IncidentCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user=Depends(require_permissions(Permission.INCIDENTS_CREATE)),
 ):
     created = crud.create_incident(
@@ -126,7 +131,7 @@ def create_incident(
         actor_email=current_user.email,
         action='incident.create',
         entity_type='incident',
-        entity_id=str(created.id),
+        entity_id=str(created['id']),
     )
     return created
 

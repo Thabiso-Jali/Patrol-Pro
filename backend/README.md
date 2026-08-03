@@ -35,13 +35,11 @@ pip install -r requirements.txt
 ### 2. Database Initialization
 
 ```bash
-# Run the initialization script to create tables and seed demo data
-python3 init_db.py
+# Alembic is the only production schema authority.
+alembic upgrade head
 
-# This will:
-# ✓ Create all database tables
-# ✓ Create demo user (officer1783163143325@patrol.pro / password123)
-# ✓ Seed sample patrols and devices
+# Optional development-only demo data may be loaded separately after migration.
+# Never run demo seed tooling against a shared or production database.
 ```
 
 ### 3. Start the Backend
@@ -251,9 +249,10 @@ lsof -ti:8000 | xargs kill -9
 ### Database Issues
 
 ```bash
-# Reset database (WARNING: deletes all data)
-rm patrol_pro.db
-python3 init_db.py
+# Inspect migration state without changing data
+alembic current
+alembic heads
+alembic check
 ```
 
 ### Authentication Errors

@@ -1,5 +1,12 @@
 # Patrol Pro canonical domain model
 
+## Increment 6 concurrency contract
+
+Mutable roots compare expected versions inside the coordinated transaction,
+lock roots for multi-row invariants, and advance successful commands exactly
+once. Retry-prone commands share the organisation- and actor-scoped idempotency
+ledger. Append-only Verification and Operational Events remain unversioned.
+
 **Status:** Phase 1 architecture contract
 
 **Scope:** Persistence and internal domain ownership only
@@ -94,6 +101,32 @@ flowchart TD
 ## State and immutability rules
 
 Legal state edges are defined in `backend/app/domain/states.py`. Route handlers and feature services must call those definitions; they may not implement alternate transition graphs. Terminal operational states reject mutation and require correction, amendment, revision or supersession.
+
+## Integrity fields
+
+Mutable roots carry `record_version`; append-only verification and operational
+event records do not. Legacy User-based Team, Patrol and location references are
+preserved while nullable canonical `employee_id` fields are synchronised with
+explicit provenance. The database also enforces same-tenant composite references
+for the highest-risk canonical links on PostgreSQL.
+
+Checkpoint Verification Events distinguish original confirmations from correction
+events and retain low-assurance provenance for migrated legacy confirmations.
+Evidence and Daily Activity Report revisions retain acceptance/approval actors,
+correction or supersession relationships, archive facts and immutable checksums or
+snapshots without exposing unfinished workflows through public APIs.
+
+`IdempotencyRecord` belongs to the Organisation aggregate and is internal command
+infrastructure. It is not a timeline event and has no management endpoint.
+
+## Amendment ownership
+
+Owning services apply the shared immutability policy at the SQLAlchemy flush
+boundary. Policy and Post Order corrections create versioned replacements; Shift
+and Patrol corrections create amendments; Verification and Operational Event
+corrections append new events; Evidence and Daily Report corrections create
+replacement records or revisions. Original snapshots, checksums, acknowledgements
+and low-assurance provenance remain unchanged.
 
 ## Compatibility decisions
 

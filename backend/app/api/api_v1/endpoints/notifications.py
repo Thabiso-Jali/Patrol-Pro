@@ -6,6 +6,7 @@ from ....database import SessionLocal
 from ....permissions import Permission
 from ....security import require_permissions
 from ....services.audit import log_audit_event
+from ....services.transactions import transactional_session
 
 router = APIRouter()
 
@@ -39,7 +40,7 @@ def list_notifications(
 @router.post('/', response_model=schemas.Notification)
 def create_notification(
     notification: schemas.NotificationCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: schemas.User = Depends(require_permissions(Permission.NOTIFICATIONS_MANAGE)),
 ):
     created = crud.create_notification(
@@ -62,7 +63,7 @@ def create_notification(
 @router.post('/{notification_id}/read', response_model=schemas.Notification)
 def mark_notification_read(
     notification_id: int,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: schemas.User = Depends(require_permissions(Permission.NOTIFICATIONS_VIEW)),
 ):
     notification = crud.mark_notification_read(

@@ -1,10 +1,14 @@
 import logging
-from fastapi import FastAPI
+from uuid import uuid4
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import inspect, text
 
 from .config import get_settings
 from .database import engine, Base
+from .domain.errors import DomainError
 from .middleware.security import RateLimitMiddleware, SecurityHeadersMiddleware
 from .api.api_v1.api import api_router
 from .api.mvp import router as mvp_router
@@ -25,6 +29,17 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
 )
+
+
+@app.exception_handler(DomainError)
+async def domain_error_handler(request: Request, exc: DomainError):
+    supplied = request.headers.get('X-Correlation-ID', '').strip()
+    correlation_id = supplied[:128] if supplied and supplied.isprintable() else str(uuid4())
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=exc.envelope(correlation_id),
+        headers={'X-Correlation-ID': correlation_id},
+    )
 
 # Add CORS middleware
 app.add_middleware(

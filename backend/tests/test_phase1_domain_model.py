@@ -7,12 +7,14 @@ from sqlalchemy.orm import sessionmaker
 from backend.app import models
 from backend.app.database import Base
 from backend.app.domain.registry import DOMAIN_OBJECT_OWNERS, DomainObjectType
+from backend.app.domain.errors import DomainError, ImmutableRecord
 from backend.app.domain.states import InvalidStateTransition, assert_mutable, assert_transition
 from backend.app.services.domain_registry import register_domain_object, require_domain_object
 from backend.app.services.evidence import link_evidence
 from backend.app.services.operational_events import append_operational_event
 from backend.app.services.workforce_credentials import assign_qualification
 from backend.app.services.workforce_scheduling import declare_availability, request_leave
+from backend.app.services.tenant_validation import aggregate_mutation
 
 
 @pytest.fixture()
@@ -58,7 +60,7 @@ def test_registry_is_shared_and_tenant_scoped(domain_db):
         object_id=first.id,
     )
     assert registered.owning_service == DOMAIN_OBJECT_OWNERS[DomainObjectType.ORGANISATION][1]
-    with pytest.raises(ValueError):
+    with pytest.raises(DomainError):
         require_domain_object(
             domain_db, organisation_id=second.id, domain_object_id=registered.id
         )
@@ -70,12 +72,20 @@ def test_operational_event_store_is_append_only_and_supports_multiple_subjects(d
         domain_db, organisation_id=org.id,
         object_type=DomainObjectType.ORGANISATION, object_id=org.id,
     )
-    secondary = models.DomainObject(
-        organisation_id=org.id, object_type='site', object_id=91,
-        aggregate_root_type='site', aggregate_root_id=91, owning_service='sites',
-    )
-    domain_db.add(secondary)
+    customer = models.Customer(name='Event Customer', organisation_id=org.id)
+    domain_db.add(customer)
     domain_db.flush()
+    site = models.Site(
+        organisation_id=org.id, customer_id=customer.id, name='Event Site',
+        address='1 Event Road', timezone='UTC', status='active',
+    )
+    with aggregate_mutation(domain_db, 'sites'):
+        domain_db.add(site)
+        domain_db.flush()
+    secondary = register_domain_object(
+        domain_db, organisation_id=org.id,
+        object_type=DomainObjectType.SITE, object_id=site.id,
+    )
     event = append_operational_event(
         domain_db,
         organisation_id=org.id,
@@ -105,9 +115,10 @@ def test_evidence_cannot_link_across_organisations(domain_db):
         original_filename='evidence.jpg', media_type='image/jpeg',
         byte_size=10, content_hash='fake-hash', status='available',
     )
-    domain_db.add(attachment)
-    domain_db.flush()
-    with pytest.raises(ValueError):
+    with aggregate_mutation(domain_db, 'evidence'):
+        domain_db.add(attachment)
+        domain_db.flush()
+    with pytest.raises(DomainError):
         link_evidence(
             domain_db, organisation_id=second.id,
             evidence_attachment_id=attachment.id,
@@ -119,7 +130,7 @@ def test_state_machines_reject_impossible_transitions_and_mutation():
     assert_transition('patrol_occurrence', 'scheduled', 'in_progress')
     with pytest.raises(InvalidStateTransition):
         assert_transition('patrol_occurrence', 'scheduled', 'completed')
-    with pytest.raises(InvalidStateTransition):
+    with pytest.raises(ImmutableRecord):
         assert_mutable('patrol_occurrence', 'completed')
 
 
@@ -133,15 +144,17 @@ def test_canonical_relationships_use_independent_shift_and_occurrence(domain_db)
         address='1 Example Road', timezone='UTC', staffing_requirement=1,
         status='active', source_kind='native',
     )
-    domain_db.add(site)
-    domain_db.flush()
+    with aggregate_mutation(domain_db, 'sites'):
+        domain_db.add(site)
+        domain_db.flush()
     shift = models.Shift(
         organisation_id=org.id, site_id=site.id, name='Day',
         starts_at=datetime.now(timezone.utc), ends_at=datetime.now(timezone.utc),
         status='draft',
     )
-    domain_db.add(shift)
-    domain_db.flush()
+    with aggregate_mutation(domain_db, 'shifts'):
+        domain_db.add(shift)
+        domain_db.flush()
     occurrence = models.Patrol(
         organisation_id=org.id, name='Perimeter', shift_id=shift.id,
         lifecycle_status='scheduled', required_officers=1,
@@ -162,13 +175,17 @@ def test_internal_workforce_services_enforce_tenant_and_time_boundaries(domain_d
     qualification = models.Qualification(
         organisation_id=first.id, code='FIRST-AID', name='First Aid', status='active',
     )
-    domain_db.add_all((employee, qualification))
-    domain_db.flush()
+    with aggregate_mutation(domain_db, 'employees'):
+        domain_db.add(employee)
+        domain_db.flush()
+    with aggregate_mutation(domain_db, 'workforce_credentials'):
+        domain_db.add(qualification)
+        domain_db.flush()
     assert assign_qualification(
         domain_db, organisation_id=first.id, employee_id=employee.id,
         qualification_id=qualification.id,
     ).employee_id == employee.id
-    with pytest.raises(ValueError):
+    with pytest.raises(DomainError):
         assign_qualification(
             domain_db, organisation_id=second.id, employee_id=employee.id,
             qualification_id=qualification.id,

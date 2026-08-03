@@ -6,6 +6,7 @@ from ....database import SessionLocal
 from ....permissions import Permission
 from ....security import require_permissions
 from ....services.audit import log_audit_event
+from ....services.transactions import transactional_session
 
 router = APIRouter()
 
@@ -45,7 +46,7 @@ def get_device(
 @router.post('/', response_model=schemas.Device)
 def create_device(
     device: schemas.DeviceCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: schemas.User = Depends(require_permissions(Permission.DEVICES_MANAGE)),
 ):
     """Create a new device."""
@@ -70,7 +71,7 @@ def create_device(
 def update_device(
     device_id: int,
     device_update: schemas.DeviceCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: schemas.User = Depends(require_permissions(Permission.DEVICES_MANAGE)),
 ):
     """Update an existing device."""
@@ -98,7 +99,7 @@ def update_device(
 @router.delete('/{device_id}')
 def delete_device(
     device_id: int,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: schemas.User = Depends(require_permissions(Permission.DEVICES_MANAGE)),
 ):
     """Delete a device."""

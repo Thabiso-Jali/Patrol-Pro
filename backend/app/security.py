@@ -60,13 +60,12 @@ def authenticate_user(db: Session, email: str, password: str):
         if user.failed_login_attempts >= settings.ACCOUNT_LOCK_MAX_FAILURES:
             user.locked_until = now + timedelta(minutes=settings.ACCOUNT_LOCK_MINUTES)
             user.failed_login_attempts = 0
-        db.commit()
+        db.flush()
         return None
     user.failed_login_attempts = 0
     user.locked_until = None
     user.last_login_at = now
-    db.commit()
-    db.refresh(user)
+    db.flush()
     return user
 
 

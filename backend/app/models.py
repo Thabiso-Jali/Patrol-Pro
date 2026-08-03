@@ -1,14 +1,24 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, Column, DateTime, Float, ForeignKey, Index, Integer,
-    JSON, String, Text, UniqueConstraint, text,
+    Boolean, CheckConstraint, Column, DateTime, Float, ForeignKey, ForeignKeyConstraint,
+    Index, Integer, JSON, String, Text, UniqueConstraint, text,
 )
 from .database import Base
+from .domain.states import STATE_MACHINES
 
 
 def utcnow():
     return datetime.now(timezone.utc)
+
+
+def stored_state_constraint(machine_name, column_name='status', *, name=None):
+    """Build a stored-value constraint from the executable state catalogue."""
+    values = ', '.join(repr(value) for value in sorted(STATE_MACHINES[machine_name].states))
+    return CheckConstraint(
+        f'{column_name} IN ({values})',
+        name=name or f'ck_{machine_name}_stored_state',
+    )
 
 
 class AuditMixin:
@@ -22,6 +32,9 @@ class AuditMixin:
 class Organisation(Base):
     """Top-level tenant entity — one per security company."""
     __tablename__ = 'organisations'
+    __table_args__ = (
+        stored_state_constraint('organisation', name='ck_organisations_status'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, index=True)
@@ -38,11 +51,11 @@ class Organisation(Base):
     phone = Column(String, nullable=True)
     subscription_plan = Column(String, nullable=False, default='pilot')
     permission_version = Column(Integer, nullable=False, default=1)
+    record_version = Column(Integer, nullable=False, default=1)
     status = Column(String, nullable=False, default='active', index=True)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-
 
 class User(Base, AuditMixin):
     __tablename__ = 'users'
@@ -68,6 +81,10 @@ class User(Base, AuditMixin):
 
 class Patrol(Base, AuditMixin):
     __tablename__ = 'patrols'
+    __table_args__ = (
+        stored_state_constraint('patrol_occurrence', 'lifecycle_status', name='ck_patrols_lifecycle_status'),
+        UniqueConstraint('organisation_id', 'id', name='uq_patrols_tenant_id'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
@@ -81,6 +98,7 @@ class Patrol(Base, AuditMixin):
     shift_id = Column(Integer, ForeignKey('shifts.id'), nullable=True, index=True)
     lifecycle_status = Column(String, nullable=False, default='scheduled', index=True)
     template_snapshot = Column(JSON, nullable=True)
+    operational_snapshot = Column(JSON, nullable=True)
     amendment_of_id = Column(Integer, ForeignKey('patrols.id'), nullable=True, index=True)
     record_version = Column(Integer, nullable=False, default=1)
     organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
@@ -90,6 +108,8 @@ class Team(Base, AuditMixin):
     __tablename__ = 'teams'
     __table_args__ = (
         UniqueConstraint('organisation_id', 'name', name='uq_teams_org_name'),
+        UniqueConstraint('organisation_id', 'id', name='uq_teams_tenant_id'),
+        stored_state_constraint('team', name='ck_teams_status'),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -97,6 +117,7 @@ class Team(Base, AuditMixin):
     leader_user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
     notes = Column(Text, nullable=True)
     status = Column(String, nullable=False, default='active', index=True)
+    record_version = Column(Integer, nullable=False, default=1)
     organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
 
 
@@ -105,11 +126,18 @@ class TeamMember(Base):
     __table_args__ = (
         UniqueConstraint('organisation_id', 'user_id', name='uq_team_members_org_user'),
         UniqueConstraint('team_id', 'user_id', name='uq_team_members_team_user'),
+        UniqueConstraint('team_id', 'employee_id', name='uq_team_members_team_employee'),
+        ForeignKeyConstraint(
+            ['organisation_id', 'employee_id'], ['employees.organisation_id', 'employees.id'],
+            name='fk_team_members_tenant_employee',
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     team_id = Column(Integer, ForeignKey('teams.id'), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    employee_id = Column(Integer, ForeignKey('employees.id'), nullable=True, index=True)
+    employee_reference_source = Column(String, nullable=False, default='legacy_user_only', index=True)
     organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     created_by = Column(Integer, nullable=True, index=True)
@@ -125,11 +153,18 @@ class PatrolAssignment(Base):
         ),
         UniqueConstraint('patrol_id', 'user_id', name='uq_patrol_assignment_user'),
         UniqueConstraint('patrol_id', 'team_id', name='uq_patrol_assignment_team'),
+        UniqueConstraint('patrol_id', 'employee_id', name='uq_patrol_assignment_employee'),
+        ForeignKeyConstraint(
+            ['organisation_id', 'employee_id'], ['employees.organisation_id', 'employees.id'],
+            name='fk_patrol_assignments_tenant_employee',
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     patrol_id = Column(Integer, ForeignKey('patrols.id'), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
+    employee_id = Column(Integer, ForeignKey('employees.id'), nullable=True, index=True)
+    employee_reference_source = Column(String, nullable=False, default='legacy_user_only', index=True)
     team_id = Column(Integer, ForeignKey('teams.id'), nullable=True, index=True)
     organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
@@ -170,6 +205,10 @@ class Device(Base, AuditMixin):
 
 class Customer(Base, AuditMixin):
     __tablename__ = 'customers'
+    __table_args__ = (
+        UniqueConstraint('organisation_id', 'id', name='uq_customers_tenant_id'),
+        stored_state_constraint('customer', name='ck_customers_status'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
@@ -177,11 +216,14 @@ class Customer(Base, AuditMixin):
     phone = Column(String, nullable=True)
     address = Column(String, nullable=True)
     commercial_metadata = Column(JSON, nullable=True)
+    status = Column(String, nullable=False, default='active', index=True)
+    record_version = Column(Integer, nullable=False, default=1)
     organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
 
 
 class Alert(Base, AuditMixin):
     __tablename__ = 'alerts'
+    __table_args__ = (stored_state_constraint('incident', name='ck_alerts_status'),)
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
@@ -227,9 +269,17 @@ class Checkpoint(Base, AuditMixin):
 
 class OfficerLocation(Base):
     __tablename__ = 'officer_locations'
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['organisation_id', 'employee_id'], ['employees.organisation_id', 'employees.id'],
+            name='fk_officer_locations_tenant_employee',
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     officer_user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    employee_id = Column(Integer, ForeignKey('employees.id'), nullable=True, index=True)
+    employee_reference_source = Column(String, nullable=False, default='legacy_user_only', index=True)
     patrol_id = Column(Integer, ForeignKey('patrols.id'), nullable=True, index=True)
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
@@ -241,6 +291,7 @@ class OfficerLocation(Base):
 
 class Notification(Base, AuditMixin):
     __tablename__ = 'notifications'
+    __table_args__ = (stored_state_constraint('notification_delivery', 'delivery_status', name='ck_notifications_delivery_status'),)
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
@@ -255,6 +306,7 @@ class Notification(Base, AuditMixin):
     delivered_at = Column(DateTime, nullable=True, index=True)
     failed_at = Column(DateTime, nullable=True, index=True)
     failure_code = Column(String, nullable=True)
+    record_version = Column(Integer, nullable=False, default=1)
     organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
 
 
@@ -310,6 +362,7 @@ class DomainObject(Base):
     __tablename__ = 'domain_objects'
     __table_args__ = (
         UniqueConstraint('organisation_id', 'object_type', 'object_id', name='uq_domain_object_identity'),
+        UniqueConstraint('organisation_id', 'id', name='uq_domain_objects_tenant_id'),
     )
     __aggregate_root__ = 'organisation'
     __owning_service__ = 'domain_registry'
@@ -330,6 +383,8 @@ class Employee(Base, AuditMixin):
     __table_args__ = (
         UniqueConstraint('organisation_id', 'employee_identifier', name='uq_employees_org_identifier'),
         UniqueConstraint('user_id', name='uq_employees_user'),
+        UniqueConstraint('organisation_id', 'id', name='uq_employees_tenant_id'),
+        stored_state_constraint('employee', name='ck_employees_status'),
     )
     __aggregate_root__ = 'employee'
     __owning_service__ = 'employees'
@@ -344,6 +399,7 @@ class Employee(Base, AuditMixin):
     source_kind = Column(String, nullable=False, default='native', index=True)
     effective_from = Column(DateTime, nullable=True)
     effective_to = Column(DateTime, nullable=True)
+    record_version = Column(Integer, nullable=False, default=1)
 
 
 class Contact(Base, AuditMixin):
@@ -377,6 +433,12 @@ class Site(Base, AuditMixin):
     __tablename__ = 'sites'
     __table_args__ = (
         UniqueConstraint('organisation_id', 'customer_id', 'name', name='uq_sites_customer_name'),
+        UniqueConstraint('organisation_id', 'id', name='uq_sites_tenant_id'),
+        ForeignKeyConstraint(
+            ['organisation_id', 'customer_id'], ['customers.organisation_id', 'customers.id'],
+            name='fk_sites_tenant_customer',
+        ),
+        stored_state_constraint('site', name='ck_sites_status'),
     )
     __aggregate_root__ = 'site'
     __owning_service__ = 'sites'
@@ -394,6 +456,7 @@ class Site(Base, AuditMixin):
     operational_risk = Column(Text, nullable=True)
     status = Column(String, nullable=False, default='active', index=True)
     source_kind = Column(String, nullable=False, default='native', index=True)
+    record_version = Column(Integer, nullable=False, default=1)
 
 
 class SiteAsset(Base, AuditMixin):
@@ -424,6 +487,11 @@ class CompanyPolicy(Base, AuditMixin):
     __tablename__ = 'company_policies'
     __table_args__ = (
         UniqueConstraint('organisation_id', 'policy_type', 'version', name='uq_company_policy_version'),
+        stored_state_constraint('company_policy', name='ck_company_policies_status'),
+        Index(
+            'uq_company_policies_active_scope', 'organisation_id', 'policy_type',
+            unique=True, postgresql_where=text("status = 'active'"), sqlite_where=text("status = 'active'"),
+        ),
     )
     __aggregate_root__ = 'organisation'
     __owning_service__ = 'company_policies'
@@ -439,10 +507,12 @@ class CompanyPolicy(Base, AuditMixin):
     supersedes_id = Column(Integer, ForeignKey('company_policies.id'), nullable=True, index=True)
     approved_by_employee_id = Column(Integer, ForeignKey('employees.id'), nullable=True)
     approved_at = Column(DateTime, nullable=True)
+    record_version = Column(Integer, nullable=False, default=1)
 
 
 class PostOrder(Base, AuditMixin):
     __tablename__ = 'post_orders'
+    __table_args__ = (UniqueConstraint('organisation_id', 'id', name='uq_post_orders_tenant_id'),)
     __aggregate_root__ = 'site'
     __owning_service__ = 'post_orders'
 
@@ -452,11 +522,20 @@ class PostOrder(Base, AuditMixin):
     title = Column(String, nullable=False)
     category = Column(String, nullable=False, default='general', index=True)
     status = Column(String, nullable=False, default='draft', index=True)
+    record_version = Column(Integer, nullable=False, default=1)
 
 
 class PostOrderVersion(Base):
     __tablename__ = 'post_order_versions'
-    __table_args__ = (UniqueConstraint('post_order_id', 'version', name='uq_post_order_version'),)
+    __table_args__ = (
+        UniqueConstraint('post_order_id', 'version', name='uq_post_order_version'),
+        UniqueConstraint('organisation_id', 'id', name='uq_post_order_versions_tenant_id'),
+        stored_state_constraint('post_order_version', name='ck_post_order_versions_status'),
+        Index(
+            'uq_post_order_versions_active_scope', 'organisation_id', 'post_order_id',
+            unique=True, postgresql_where=text("status = 'active'"), sqlite_where=text("status = 'active'"),
+        ),
+    )
     __aggregate_root__ = 'site'
     __owning_service__ = 'post_orders'
 
@@ -473,6 +552,9 @@ class PostOrderVersion(Base):
     approved_by_employee_id = Column(Integer, ForeignKey('employees.id'), nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     approved_at = Column(DateTime, nullable=True)
+    archived_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    content_checksum = Column(String, nullable=True, index=True)
+    record_version = Column(Integer, nullable=False, default=1)
 
 
 class PostOrderAcknowledgement(Base):
@@ -493,7 +575,10 @@ class PostOrderAcknowledgement(Base):
 
 class Qualification(Base, AuditMixin):
     __tablename__ = 'qualifications'
-    __table_args__ = (UniqueConstraint('organisation_id', 'code', name='uq_qualification_code'),)
+    __table_args__ = (
+        UniqueConstraint('organisation_id', 'code', name='uq_qualification_code'),
+        stored_state_constraint('qualification', name='ck_qualifications_status'),
+    )
     __aggregate_root__ = 'organisation'
     __owning_service__ = 'workforce_credentials'
 
@@ -522,7 +607,10 @@ class EmployeeQualification(Base):
 
 class Licence(Base, AuditMixin):
     __tablename__ = 'licences'
-    __table_args__ = (UniqueConstraint('organisation_id', 'licence_identifier', name='uq_licence_identifier'),)
+    __table_args__ = (
+        UniqueConstraint('organisation_id', 'licence_identifier', name='uq_licence_identifier'),
+        stored_state_constraint('licence', name='ck_licences_status'),
+    )
     __aggregate_root__ = 'employee'
     __owning_service__ = 'workforce_credentials'
 
@@ -540,6 +628,7 @@ class Licence(Base, AuditMixin):
 
 class AvailabilityPeriod(Base, AuditMixin):
     __tablename__ = 'availability_periods'
+    __table_args__ = (stored_state_constraint('availability', name='ck_availability_periods_status'),)
     __aggregate_root__ = 'employee'
     __owning_service__ = 'workforce_scheduling'
 
@@ -554,6 +643,7 @@ class AvailabilityPeriod(Base, AuditMixin):
 
 class LeavePeriod(Base, AuditMixin):
     __tablename__ = 'leave_periods'
+    __table_args__ = (stored_state_constraint('leave', name='ck_leave_periods_status'),)
     __aggregate_root__ = 'employee'
     __owning_service__ = 'workforce_scheduling'
 
@@ -570,6 +660,10 @@ class LeavePeriod(Base, AuditMixin):
 
 class Shift(Base, AuditMixin):
     __tablename__ = 'shifts'
+    __table_args__ = (
+        UniqueConstraint('organisation_id', 'id', name='uq_shifts_tenant_id'),
+        stored_state_constraint('shift', name='ck_shifts_status'),
+    )
     __aggregate_root__ = 'shift'
     __owning_service__ = 'shifts'
 
@@ -592,6 +686,7 @@ class ShiftAssignment(Base, AuditMixin):
             '(employee_id IS NULL AND team_id IS NOT NULL)',
             name='ck_shift_assignment_one_target',
         ),
+        stored_state_constraint('shift_assignment', name='ck_shift_assignments_status'),
     )
     __aggregate_root__ = 'shift'
     __owning_service__ = 'shifts'
@@ -602,10 +697,12 @@ class ShiftAssignment(Base, AuditMixin):
     employee_id = Column(Integer, ForeignKey('employees.id'), nullable=True, index=True)
     team_id = Column(Integer, ForeignKey('teams.id'), nullable=True, index=True)
     status = Column(String, nullable=False, default='proposed', index=True)
+    record_version = Column(Integer, nullable=False, default=1)
 
 
 class PatrolTemplate(Base, AuditMixin):
     __tablename__ = 'patrol_templates'
+    __table_args__ = (stored_state_constraint('patrol_template', name='ck_patrol_templates_status'),)
     __aggregate_root__ = 'patrol_template'
     __owning_service__ = 'patrol_templates'
 
@@ -620,6 +717,7 @@ class PatrolTemplate(Base, AuditMixin):
     status = Column(String, nullable=False, default='draft', index=True)
     version = Column(Integer, nullable=False, default=1)
     supersedes_id = Column(Integer, ForeignKey('patrol_templates.id'), nullable=True)
+    record_version = Column(Integer, nullable=False, default=1)
 
 
 class PatrolTemplateCheckpoint(Base):
@@ -641,6 +739,27 @@ class PatrolTemplateCheckpoint(Base):
 
 class CheckpointVerificationEvent(Base):
     __tablename__ = 'checkpoint_verification_events'
+    __table_args__ = (
+        UniqueConstraint('organisation_id', 'id', name='uq_checkpoint_verification_events_tenant_id'),
+        CheckConstraint(
+            'correction_of_id IS NULL OR correction_of_id <> id',
+            name='ck_checkpoint_verification_not_self_correction',
+        ),
+        CheckConstraint(
+            "event_kind IN ('original', 'correction')",
+            name='ck_checkpoint_verification_event_kind',
+        ),
+        ForeignKeyConstraint(
+            ['organisation_id', 'correction_of_id'],
+            ['checkpoint_verification_events.organisation_id', 'checkpoint_verification_events.id'],
+            name='fk_checkpoint_verification_tenant_correction',
+        ),
+        ForeignKeyConstraint(
+            ['organisation_id', 'original_event_id'],
+            ['checkpoint_verification_events.organisation_id', 'checkpoint_verification_events.id'],
+            name='fk_checkpoint_verification_tenant_original',
+        ),
+    )
     __aggregate_root__ = 'patrol_occurrence'
     __owning_service__ = 'checkpoint_verifications'
 
@@ -656,10 +775,17 @@ class CheckpointVerificationEvent(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     source_kind = Column(String, nullable=False, default='native', index=True)
+    event_kind = Column(String, nullable=False, default='original', index=True)
+    idempotency_key = Column(String, nullable=True, index=True)
+    correction_of_id = Column(Integer, ForeignKey('checkpoint_verification_events.id'), nullable=True, index=True)
+    original_event_id = Column(Integer, ForeignKey('checkpoint_verification_events.id'), nullable=True, index=True)
+    record_provenance = Column(String, nullable=False, default='native_confirmation', index=True)
+    context_snapshot = Column(JSON, nullable=True)
 
 
 class OperationalAlert(Base, AuditMixin):
     __tablename__ = 'operational_alerts'
+    __table_args__ = (stored_state_constraint('operational_alert', name='ck_operational_alerts_status'),)
     __aggregate_root__ = 'operational_alert'
     __owning_service__ = 'operational_alerts'
 
@@ -673,10 +799,21 @@ class OperationalAlert(Base, AuditMixin):
     acknowledged_by_employee_id = Column(Integer, ForeignKey('employees.id'), nullable=True)
     acknowledged_at = Column(DateTime, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
+    record_version = Column(Integer, nullable=False, default=1)
 
 
 class EvidenceAttachment(Base):
     __tablename__ = 'evidence_attachments'
+    __table_args__ = (
+        UniqueConstraint('organisation_id', 'id', name='uq_evidence_attachments_tenant_id'),
+        stored_state_constraint('evidence_attachment', name='ck_evidence_attachments_status'),
+        CheckConstraint('correction_of_id IS NULL OR correction_of_id <> id', name='ck_evidence_not_self_correction'),
+        ForeignKeyConstraint(
+            ['organisation_id', 'correction_of_id'],
+            ['evidence_attachments.organisation_id', 'evidence_attachments.id'],
+            name='fk_evidence_tenant_correction',
+        ),
+    )
     __aggregate_root__ = 'evidence'
     __owning_service__ = 'evidence'
 
@@ -692,12 +829,29 @@ class EvidenceAttachment(Base):
     created_by_employee_id = Column(Integer, ForeignKey('employees.id'), nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     supersedes_id = Column(Integer, ForeignKey('evidence_attachments.id'), nullable=True)
+    correction_of_id = Column(Integer, ForeignKey('evidence_attachments.id'), nullable=True, index=True)
+    accepted_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    accepted_by_employee_id = Column(Integer, ForeignKey('employees.id'), nullable=True, index=True)
+    immutable_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    archived_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    acceptance_version = Column(Integer, nullable=True)
+    record_version = Column(Integer, nullable=False, default=1)
 
 
 class EvidenceLink(Base):
     __tablename__ = 'evidence_links'
     __table_args__ = (
         UniqueConstraint('evidence_attachment_id', 'domain_object_id', name='uq_evidence_domain_link'),
+        ForeignKeyConstraint(
+            ['organisation_id', 'evidence_attachment_id'],
+            ['evidence_attachments.organisation_id', 'evidence_attachments.id'],
+            name='fk_evidence_links_tenant_attachment',
+        ),
+        ForeignKeyConstraint(
+            ['organisation_id', 'domain_object_id'],
+            ['domain_objects.organisation_id', 'domain_objects.id'],
+            name='fk_evidence_links_tenant_domain_object',
+        ),
     )
     __aggregate_root__ = 'evidence'
     __owning_service__ = 'evidence'
@@ -714,6 +868,8 @@ class DailyActivityReport(Base):
     __tablename__ = 'daily_activity_reports'
     __table_args__ = (
         UniqueConstraint('organisation_id', 'report_key', 'revision', name='uq_daily_report_revision'),
+        stored_state_constraint('daily_activity_report', name='ck_daily_activity_reports_status'),
+        CheckConstraint('correction_of_id IS NULL OR correction_of_id <> id', name='ck_daily_report_not_self_correction'),
     )
     __aggregate_root__ = 'daily_activity_report'
     __owning_service__ = 'daily_activity_reports'
@@ -732,12 +888,24 @@ class DailyActivityReport(Base):
     delivered_at = Column(DateTime, nullable=True)
     created_by_employee_id = Column(Integer, ForeignKey('employees.id'), nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
+    correction_of_id = Column(Integer, ForeignKey('daily_activity_reports.id'), nullable=True, index=True)
+    approved_by_employee_id = Column(Integer, ForeignKey('employees.id'), nullable=True, index=True)
+    snapshot_checksum = Column(String, nullable=True, index=True)
+    site_snapshot = Column(JSON, nullable=True)
+    archived_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    approval_version = Column(Integer, nullable=True)
+    record_version = Column(Integer, nullable=False, default=1)
 
 
 class OperationalEventSubject(Base):
     __tablename__ = 'operational_event_subjects'
     __table_args__ = (
         UniqueConstraint('operational_event_id', 'domain_object_id', name='uq_event_subject'),
+        ForeignKeyConstraint(
+            ['organisation_id', 'domain_object_id'],
+            ['domain_objects.organisation_id', 'domain_objects.id'],
+            name='fk_event_subjects_tenant_domain_object',
+        ),
     )
     __aggregate_root__ = 'operational_event'
     __owning_service__ = 'operational_events'
@@ -746,3 +914,39 @@ class OperationalEventSubject(Base):
     organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
     operational_event_id = Column(Integer, ForeignKey('audit_logs.id'), nullable=False, index=True)
     domain_object_id = Column(Integer, ForeignKey('domain_objects.id'), nullable=False, index=True)
+
+
+class IdempotencyRecord(Base):
+    """Internal organisation-scoped command replay ledger; no public API."""
+    __tablename__ = 'idempotency_records'
+    __table_args__ = (
+        UniqueConstraint(
+            'organisation_id', 'actor_scope', 'command_type', 'idempotency_key',
+            name='uq_idempotency_command_scope',
+        ),
+        CheckConstraint(
+            "processing_state IN ('pending', 'completed', 'failed')",
+            name='ck_idempotency_records_processing_state',
+        ),
+        CheckConstraint('record_version >= 1', name='ck_idempotency_records_record_version'),
+    )
+    __aggregate_root__ = 'organisation'
+    __owning_service__ = 'idempotency'
+
+    id = Column(Integer, primary_key=True)
+    organisation_id = Column(Integer, ForeignKey('organisations.id'), nullable=False, index=True)
+    actor_user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
+    actor_scope = Column(String, nullable=False)
+    idempotency_key = Column(String, nullable=False)
+    command_type = Column(String, nullable=False, index=True)
+    request_fingerprint = Column(String, nullable=False)
+    processing_state = Column(String, nullable=False, default='pending', index=True)
+    result_object_type = Column(String, nullable=True)
+    result_object_id = Column(Integer, nullable=True)
+    response_metadata = Column(JSON, nullable=True)
+    failure_code = Column(String, nullable=True)
+    correlation_id = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, index=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    record_version = Column(Integer, nullable=False, default=1)

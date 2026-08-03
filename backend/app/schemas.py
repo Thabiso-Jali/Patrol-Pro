@@ -197,6 +197,7 @@ class Patrol(PatrolBase):
     assignment_names: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    record_version: int = 1
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -220,6 +221,7 @@ class TeamMemberSummary(BaseModel):
 
 class Team(TeamBase):
     id: int
+    record_version: int = 1
     members: list[TeamMemberSummary] = Field(default_factory=list)
     availability: str = 'available'
     active_patrols: list[str] = Field(default_factory=list)
@@ -312,6 +314,7 @@ class CustomerCreate(CustomerBase):
 
 class Customer(CustomerBase):
     id: int
+    record_version: int = 1
     created_at: datetime | None = None
     updated_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
@@ -345,6 +348,7 @@ class Alert(AlertBase):
     reported_by: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    record_version: int = 1
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -376,6 +380,7 @@ class Checkpoint(CheckpointBase):
     verified_by: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    record_version: int = 1
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -230,22 +230,45 @@ def replace_patrol_assignments(
     team_ids: list[int],
     actor_user_id: int,
 ):
-    # Serialize competing assignments for the selected people in PostgreSQL.
+    if patrol.lifecycle_status in {'completed', 'missed', 'cancelled', 'archived'}:
+        from ..domain.errors import ImmutableRecord
+        raise ImmutableRecord('patrol_occurrence', patrol.lifecycle_status)
+    # Deterministic order: patrol root, teams, users, canonical employees,
+    # then existing assignment rows. This prevents caller-order deadlocks.
+    db.query(models.Patrol.id).filter(
+        models.Patrol.id == patrol.id,
+        models.Patrol.organisation_id == patrol.organisation_id,
+    ).with_for_update().all()
     db.query(models.User.id).filter(
         models.User.organisation_id == patrol.organisation_id,
-        models.User.id.in_(officer_ids or [-1]),
-    ).with_for_update().all()
+        models.User.id.in_(sorted(set(officer_ids)) or [-1]),
+    ).order_by(models.User.id).with_for_update().all()
     db.query(models.Team.id).filter(
         models.Team.organisation_id == patrol.organisation_id,
-        models.Team.id.in_(team_ids or [-1]),
-    ).with_for_update().all()
+        models.Team.id.in_(sorted(set(team_ids)) or [-1]),
+        models.Team.status == 'active', models.Team.is_deleted.is_(False),
+    ).order_by(models.Team.id).with_for_update().all()
     users, teams, selected_user_ids = resolve_assignment_users(
         db, patrol.organisation_id, officer_ids, team_ids,
     )
     db.query(models.User.id).filter(
         models.User.organisation_id == patrol.organisation_id,
-        models.User.id.in_(selected_user_ids or {-1}),
-    ).with_for_update().all()
+        models.User.id.in_(sorted(selected_user_ids) or [-1]),
+    ).order_by(models.User.id).with_for_update().all()
+    employees = db.query(models.Employee).filter(
+        models.Employee.organisation_id == patrol.organisation_id,
+        models.Employee.user_id.in_(sorted(selected_user_ids) or [-1]),
+    ).order_by(models.Employee.id).with_for_update().all()
+    inactive_employee_users = {
+        employee.user_id for employee in employees
+        if employee.status != 'active' or employee.is_deleted
+    }
+    if inactive_employee_users:
+        from ..domain.errors import DomainError, DomainErrorCode
+        raise DomainError(
+            DomainErrorCode.ARCHIVED_DEPENDENCY,
+            'An assigned employee is inactive or archived.',
+        )
     conflicts = conflicting_user_ids(
         db,
         patrol.organisation_id,
@@ -260,9 +283,10 @@ def replace_patrol_assignments(
             for user in operational_users(db, patrol.organisation_id)
             if user.id in conflicting_selected
         ]
-        raise HTTPException(
-            status_code=409,
-            detail=f"Assignment conflict for: {', '.join(names)}",
+        from ..domain.errors import DomainError, DomainErrorCode
+        raise DomainError(
+            DomainErrorCode.DUPLICATE_ASSIGNMENT,
+            f"Assignment conflict for: {', '.join(names)}",
         )
     if len(selected_user_ids) < patrol.required_officers:
         raise HTTPException(
@@ -273,14 +297,23 @@ def replace_patrol_assignments(
             ),
         )
 
-    db.query(models.PatrolAssignment).filter(
+    existing_assignments = db.query(models.PatrolAssignment).filter(
         models.PatrolAssignment.patrol_id == patrol.id,
         models.PatrolAssignment.organisation_id == patrol.organisation_id,
-    ).delete(synchronize_session=False)
+    ).order_by(models.PatrolAssignment.id).with_for_update().all()
+    for assignment in existing_assignments:
+        db.delete(assignment)
+    db.flush()
     for user in users:
+        employee = db.query(models.Employee).filter(
+            models.Employee.organisation_id == patrol.organisation_id,
+            models.Employee.user_id == user.id,
+        ).one_or_none()
         db.add(models.PatrolAssignment(
             patrol_id=patrol.id,
             user_id=user.id,
+            employee_id=employee.id if employee else None,
+            employee_reference_source='canonical_user_mapping' if employee else 'legacy_user_only',
             organisation_id=patrol.organisation_id,
             created_by=actor_user_id,
         ))

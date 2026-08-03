@@ -46,3 +46,23 @@ DOMAIN_OBJECT_OWNERS = {
     DomainObjectType.SITE_ASSET: ('site', 'sites'),
     DomainObjectType.COMPANY_POLICY: ('organisation', 'company_policies'),
 }
+
+
+def canonical_aggregate_root_id(object_type: DomainObjectType, source) -> int:
+    """Derive registry ownership from persisted relationships, never caller input."""
+    if object_type == DomainObjectType.CONTACT:
+        return source.customer_id if source.customer_id is not None else source.site_id
+    attribute_by_type = {
+        DomainObjectType.CHECKPOINT: 'site_id',
+        DomainObjectType.CHECKPOINT_VERIFICATION: 'patrol_occurrence_id',
+        DomainObjectType.POST_ORDER: 'site_id',
+        DomainObjectType.SITE_ASSET: 'site_id',
+    }
+    if object_type == DomainObjectType.COMPANY_POLICY:
+        return source.organisation_id
+    attribute = attribute_by_type.get(object_type)
+    if attribute:
+        related_id = getattr(source, attribute, None)
+        if related_id is not None:
+            return related_id
+    return source.id

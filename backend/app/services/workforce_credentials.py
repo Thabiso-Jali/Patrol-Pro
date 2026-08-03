@@ -3,17 +3,14 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from .. import models
+from .tenant_validation import aggregate_mutation, require_tenant_record
 
 
 def require_employee(db: Session, *, organisation_id: int, employee_id: int) -> models.Employee:
-    employee = db.query(models.Employee).filter(
-        models.Employee.id == employee_id,
-        models.Employee.organisation_id == organisation_id,
-        models.Employee.is_deleted.is_(False),
-    ).first()
-    if not employee:
-        raise ValueError('Employee does not exist in this organisation')
-    return employee
+    return require_tenant_record(
+        db, models.Employee, record_id=employee_id,
+        organisation_id=organisation_id, relationship='Employee',
+    )
 
 
 def assign_qualification(
@@ -26,13 +23,11 @@ def assign_qualification(
     expires_at: datetime | None = None,
 ) -> models.EmployeeQualification:
     require_employee(db, organisation_id=organisation_id, employee_id=employee_id)
-    qualification = db.query(models.Qualification).filter(
-        models.Qualification.id == qualification_id,
-        models.Qualification.organisation_id == organisation_id,
-        models.Qualification.is_deleted.is_(False),
-        models.Qualification.status == 'active',
-    ).first()
-    if not qualification:
+    qualification = require_tenant_record(
+        db, models.Qualification, record_id=qualification_id,
+        organisation_id=organisation_id, relationship='EmployeeQualification.qualification_id',
+    )
+    if qualification.status != 'active':
         raise ValueError('Qualification does not exist in this organisation')
     if expires_at and awarded_at and expires_at <= awarded_at:
         raise ValueError('Qualification expiry must be after its award')
@@ -44,8 +39,9 @@ def assign_qualification(
         awarded_at=awarded_at,
         expires_at=expires_at,
     )
-    db.add(assignment)
-    db.flush()
+    with aggregate_mutation(db, 'workforce_credentials'):
+        db.add(assignment)
+        db.flush()
     return assignment
 
 
@@ -61,6 +57,13 @@ def record_licence(
     qualification_id: int | None = None,
 ) -> models.Licence:
     require_employee(db, organisation_id=organisation_id, employee_id=employee_id)
+    if qualification_id is not None:
+        qualification = require_tenant_record(
+            db, models.Qualification, record_id=qualification_id,
+            organisation_id=organisation_id, relationship='Licence.qualification_id',
+        )
+        if qualification.status != 'active':
+            raise ValueError('Qualification does not exist in this organisation')
     if expires_at and issued_at and expires_at <= issued_at:
         raise ValueError('Licence expiry must be after its issue date')
     licence = models.Licence(
@@ -73,6 +76,7 @@ def record_licence(
         expires_at=expires_at,
         status='pending',
     )
-    db.add(licence)
-    db.flush()
+    with aggregate_mutation(db, 'workforce_credentials'):
+        db.add(licence)
+        db.flush()
     return licence

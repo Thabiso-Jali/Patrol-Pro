@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .... import crud, models, schemas
@@ -9,6 +9,10 @@ from ....permissions import Permission
 from ....security import require_permissions
 from ....services.audit import log_audit_event
 from ....services.staffing import replace_patrol_assignments, validate_schedule
+from ....services.transactions import transactional_session
+from ....services.patrol_occurrences import cancel_patrol_occurrence, update_patrol_occurrence
+from ....services.concurrency import parse_expected_version
+from ....services.idempotency import execute_idempotent
 
 router = APIRouter()
 
@@ -77,37 +81,34 @@ def get_patrol(
 @router.post('/', response_model=schemas.Patrol)
 def create_patrol(
     patrol: schemas.PatrolCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: schemas.User = Depends(require_permissions(Permission.PATROLS_MANAGE)),
+    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
 ):
     """Create a new patrol."""
     validate_schedule(patrol.start_time, patrol.end_time)
-    created = crud.create_patrol(
-        db=db,
-        patrol=patrol,
-        actor_user_id=current_user.id,
-        organisation_id=current_user.organisation_id,
-        commit=False,
+    def execute():
+        created = crud.create_patrol(
+            db=db, patrol=patrol, actor_user_id=current_user.id,
+            organisation_id=current_user.organisation_id,
+        )
+        replace_patrol_assignments(db, created, patrol.officer_ids, patrol.team_ids, current_user.id)
+        log_audit_event(
+            db, actor_user_id=current_user.id, actor_email=current_user.email,
+            action='patrol.create', entity_type='patrol', entity_id=str(created.id),
+            organisation_id=current_user.organisation_id,
+        )
+        return created
+    result = execute_idempotent(
+        db, organisation_id=current_user.organisation_id, actor_user_id=current_user.id,
+        command_type='patrol.create', key=idempotency_key,
+        fingerprint_payload=patrol.model_dump(mode='json'), execute=execute,
+        replay=lambda metadata: crud.get_patrol(
+            db, int(metadata['patrol_id']), current_user.organisation_id,
+        ),
+        result_metadata=lambda created: {'patrol_id': created.id},
     )
-    replace_patrol_assignments(
-        db,
-        created,
-        patrol.officer_ids,
-        patrol.team_ids,
-        current_user.id,
-    )
-    log_audit_event(
-        db,
-        actor_user_id=current_user.id,
-        actor_email=current_user.email,
-        action='patrol.create',
-        entity_type='patrol',
-        entity_id=str(created.id),
-        organisation_id=current_user.organisation_id,
-        commit=False,
-    )
-    db.commit()
-    db.refresh(created)
+    created = result.value
     return patrol_payload(db, created)
 
 
@@ -115,21 +116,22 @@ def create_patrol(
 def update_patrol(
     patrol_id: int,
     patrol_update: schemas.PatrolCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: schemas.User = Depends(require_permissions(Permission.PATROLS_MANAGE)),
+    if_match: str | None = Header(default=None, alias='If-Match'),
 ):
     """Update an existing patrol."""
     db_patrol = crud.get_patrol(db=db, patrol_id=patrol_id, organisation_id=current_user.organisation_id)
     if not db_patrol:
         raise HTTPException(status_code=404, detail='Patrol not found')
     validate_schedule(patrol_update.start_time, patrol_update.end_time)
-    updated = crud.update_patrol(
+    updated = update_patrol_occurrence(
         db=db,
         patrol_id=patrol_id,
-        patrol_update=patrol_update,
+        payload=patrol_update,
         actor_user_id=current_user.id,
         organisation_id=current_user.organisation_id,
-        commit=False,
+        expected_version=parse_expected_version(if_match),
     )
     replace_patrol_assignments(
         db,
@@ -146,28 +148,27 @@ def update_patrol(
         entity_type='patrol',
         entity_id=str(patrol_id),
         organisation_id=current_user.organisation_id,
-        commit=False,
     )
-    db.commit()
-    db.refresh(updated)
     return patrol_payload(db, updated)
 
 
 @router.delete('/{patrol_id}')
 def delete_patrol(
     patrol_id: int,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: schemas.User = Depends(require_permissions(Permission.PATROLS_MANAGE)),
+    if_match: str | None = Header(default=None, alias='If-Match'),
 ):
     """Delete a patrol."""
     db_patrol = crud.get_patrol(db=db, patrol_id=patrol_id, organisation_id=current_user.organisation_id)
     if not db_patrol:
         raise HTTPException(status_code=404, detail='Patrol not found')
-    crud.delete_patrol(
+    cancel_patrol_occurrence(
         db=db,
         patrol_id=patrol_id,
         actor_user_id=current_user.id,
         organisation_id=current_user.organisation_id,
+        expected_version=parse_expected_version(if_match),
     )
     log_audit_event(
         db,

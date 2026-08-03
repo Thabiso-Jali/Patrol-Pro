@@ -1,12 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from ....domain.states import InvalidStateTransition, assert_mutable, assert_transition
+from ....domain.states import validate_state_change
 from ....permissions import Permission
 from ....security import require_permissions
 from ....services.audit import log_audit_event
+from ....services.transactions import transactional_session
+from ....services import incidents as incident_service
+from ....services.concurrency import parse_expected_version
+from ....services.idempotency import execute_idempotent
 
 router = APIRouter()
 
@@ -55,38 +59,38 @@ def get_alert(
 @router.post('/', response_model=schemas.Alert)
 def create_alert(
     alert: schemas.AlertCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: schemas.User = Depends(require_permissions(Permission.INCIDENTS_CREATE)),
+    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
 ):
     """Create a new alert."""
     validate_alert_references(db, alert, current_user.organisation_id)
-    created = crud.create_alert(
-        db=db,
-        alert=alert,
-        actor_user_id=current_user.id,
-        organisation_id=current_user.organisation_id,
-        commit=False,
+    def execute():
+        created = incident_service.create_incident(
+            db=db, payload=alert, actor_user_id=current_user.id,
+            organisation_id=current_user.organisation_id,
+        )
+        crud.create_notification(
+            db=db,
+            notification=schemas.NotificationCreate(
+                title=f'Incident reported: {created.title}', body=created.description,
+                category='incident', priority=created.severity,
+            ), actor_user_id=current_user.id, organisation_id=current_user.organisation_id,
+        )
+        log_audit_event(
+            db, actor_user_id=current_user.id, actor_email=current_user.email,
+            action='alert.create', entity_type='incident', entity_id=str(created.id),
+        )
+        return created
+    result = execute_idempotent(
+        db, organisation_id=current_user.organisation_id, actor_user_id=current_user.id,
+        command_type='incident.create', key=idempotency_key,
+        fingerprint_payload=alert.model_dump(mode='json'), execute=execute,
+        replay=lambda metadata: crud.get_alert(
+            db, int(metadata['incident_id']), current_user.organisation_id,
+        ), result_metadata=lambda created: {'incident_id': created.id},
     )
-    crud.create_notification(
-        db=db,
-        notification=schemas.NotificationCreate(
-            title=f'Incident reported: {created.title}',
-            body=created.description,
-            category='incident',
-            priority=created.severity,
-        ),
-        actor_user_id=current_user.id,
-        organisation_id=current_user.organisation_id,
-        commit=False,
-    )
-    log_audit_event(
-        db,
-        actor_user_id=current_user.id,
-        actor_email=current_user.email,
-        action='alert.create',
-        entity_type='incident',
-        entity_id=str(created.id),
-    )
+    created = result.value
     return created
 
 
@@ -94,56 +98,72 @@ def create_alert(
 def update_alert(
     alert_id: int,
     alert_update: schemas.AlertCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: schemas.User = Depends(require_permissions(Permission.INCIDENTS_MANAGE)),
+    if_match: str | None = Header(default=None, alias='If-Match'),
+    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
 ):
     """Update an existing alert."""
-    db_alert = crud.get_alert(db=db, alert_id=alert_id, organisation_id=current_user.organisation_id)
-    if not db_alert:
-        raise HTTPException(status_code=404, detail='Alert not found')
-    try:
-        if alert_update.status.value == db_alert.status:
-            assert_mutable('incident', db_alert.status)
-        else:
-            assert_transition('incident', db_alert.status, alert_update.status.value)
-    except InvalidStateTransition as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    validate_alert_references(db, alert_update, current_user.organisation_id)
-    updated = crud.update_alert(
-        db=db,
-        alert_id=alert_id,
-        alert_update=alert_update,
-        actor_user_id=current_user.id,
-        organisation_id=current_user.organisation_id,
-        commit=False,
+    expected_version = parse_expected_version(if_match)
+
+    def execute():
+        db_alert = crud.get_alert(db=db, alert_id=alert_id, organisation_id=current_user.organisation_id)
+        if not db_alert:
+            raise HTTPException(status_code=404, detail='Alert not found')
+        provided_fields = frozenset(
+            field for field, value in {'resolution_notes': alert_update.resolution_notes}.items()
+            if value and value.strip()
+        )
+        validate_state_change(
+            'incident', db_alert.status, alert_update.status.value,
+            provided_fields=provided_fields,
+        )
+        validate_alert_references(db, alert_update, current_user.organisation_id)
+        updated = incident_service.update_incident(
+            db=db, incident_id=alert_id, payload=alert_update,
+            actor_user_id=current_user.id, organisation_id=current_user.organisation_id,
+            expected_version=expected_version,
+        )
+        log_audit_event(
+            db, actor_user_id=current_user.id, actor_email=current_user.email,
+            action='alert.update', entity_type='incident', entity_id=str(alert_id),
+        )
+        return updated
+
+    result = execute_idempotent(
+        db, organisation_id=current_user.organisation_id, actor_user_id=current_user.id,
+        command_type='incident.update', key=idempotency_key,
+        fingerprint_payload={
+            'incident_id': alert_id, 'expected_version': expected_version,
+            'payload': alert_update.model_dump(mode='json'),
+        }, execute=execute,
+        replay=lambda metadata: crud.get_alert(
+            db, int(metadata['incident_id']), current_user.organisation_id,
+        ), result_metadata=lambda updated: {
+            'incident_id': updated.id, 'status': updated.status,
+            'record_version': updated.record_version,
+        },
     )
-    log_audit_event(
-        db,
-        actor_user_id=current_user.id,
-        actor_email=current_user.email,
-        action='alert.update',
-        entity_type='incident',
-        entity_id=str(alert_id),
-    )
-    return updated
+    return result.value
 
 
 @router.delete('/{alert_id}')
 def delete_alert(
     alert_id: int,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: schemas.User = Depends(require_permissions(Permission.INCIDENTS_MANAGE)),
+    if_match: str | None = Header(default=None, alias='If-Match'),
 ):
     """Delete an alert."""
     db_alert = crud.get_alert(db=db, alert_id=alert_id, organisation_id=current_user.organisation_id)
     if not db_alert:
         raise HTTPException(status_code=404, detail='Alert not found')
-    crud.delete_alert(
+    incident_service.archive_incident(
         db=db,
-        alert_id=alert_id,
+        incident_id=alert_id,
         actor_user_id=current_user.id,
         organisation_id=current_user.organisation_id,
-        commit=False,
+        expected_version=parse_expected_version(if_match),
     )
     log_audit_event(
         db,

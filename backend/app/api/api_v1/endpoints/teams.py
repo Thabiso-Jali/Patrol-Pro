@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from .... import models, schemas
@@ -10,6 +10,9 @@ from ....permissions import Permission
 from ....security import require_permissions
 from ....services.audit import log_audit_event
 from ....services.domain_registry import register_domain_object
+from ....services.transactions import transactional_session
+from ....services.concurrency import assert_expected_version, lock_tenant_record, parse_expected_version
+from ....services.teams import archive_team as archive_team_command
 from ....services.staffing import (
     assignment_context,
     operational_users,
@@ -76,14 +79,23 @@ def replace_members(
     member_user_ids: list[int],
     actor_user_id: int,
 ):
-    db.query(models.TeamMember).filter(
+    existing_members = db.query(models.TeamMember).filter(
         models.TeamMember.team_id == team.id,
         models.TeamMember.organisation_id == team.organisation_id,
-    ).delete(synchronize_session=False)
+    ).all()
+    for member in existing_members:
+        db.delete(member)
+    db.flush()
     for user_id in member_user_ids:
+        employee = db.query(models.Employee).filter(
+            models.Employee.organisation_id == team.organisation_id,
+            models.Employee.user_id == user_id,
+        ).one_or_none()
         db.add(models.TeamMember(
             team_id=team.id,
             user_id=user_id,
+            employee_id=employee.id if employee else None,
+            employee_reference_source='canonical_user_mapping' if employee else 'legacy_user_only',
             organisation_id=team.organisation_id,
             created_by=actor_user_id,
         ))
@@ -304,7 +316,7 @@ def availability(
 @router.post('', response_model=schemas.Team, status_code=status.HTTP_201_CREATED)
 def create_team(
     payload: schemas.TeamCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: models.User = Depends(require_permissions(Permission.USERS_MANAGE)),
 ):
     validate_members(
@@ -344,10 +356,7 @@ def create_team(
         action='team.create',
         entity_type='team',
         entity_id=str(team.id),
-        commit=False,
     )
-    db.commit()
-    db.refresh(team)
     return team_payload(db, team)
 
 
@@ -355,12 +364,18 @@ def create_team(
 def update_team(
     team_id: int,
     payload: schemas.TeamCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: models.User = Depends(require_permissions(Permission.USERS_MANAGE)),
+    if_match: str | None = Header(default=None, alias='If-Match'),
 ):
     team = get_scoped_team(db, team_id, current_user.organisation_id)
     if not team:
         raise HTTPException(status_code=404, detail='Team not found')
+    team = lock_tenant_record(
+        db, models.Team, record_id=team_id,
+        organisation_id=current_user.organisation_id, relationship='Team',
+    )
+    assert_expected_version(team, parse_expected_version(if_match))
     current_members = team_member_ids(db, team.id, current_user.organisation_id)
     if current_members != set(payload.member_user_ids) and active_patrol_names(
         db, team.id, current_user.organisation_id,
@@ -389,6 +404,7 @@ def update_team(
     team.notes = payload.notes
     team.status = payload.status
     team.updated_by = current_user.id
+    team.record_version += 1
     replace_members(db, team, payload.member_user_ids, current_user.id)
     log_audit_event(
         db,
@@ -398,27 +414,31 @@ def update_team(
         action='team.update',
         entity_type='team',
         entity_id=str(team.id),
-        commit=False,
     )
-    db.commit()
-    db.refresh(team)
     return team_payload(db, team)
 
 
 @router.delete('/{team_id}', status_code=status.HTTP_204_NO_CONTENT)
 def archive_team(
     team_id: int,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: models.User = Depends(require_permissions(Permission.USERS_MANAGE)),
+    if_match: str | None = Header(default=None, alias='If-Match'),
 ):
     team = get_scoped_team(db, team_id, current_user.organisation_id)
     if not team:
         raise HTTPException(status_code=404, detail='Team not found')
+    team = lock_tenant_record(
+        db, models.Team, record_id=team_id,
+        organisation_id=current_user.organisation_id, relationship='Team',
+    )
+    assert_expected_version(team, parse_expected_version(if_match))
     if active_patrol_names(db, team.id, current_user.organisation_id):
         raise HTTPException(status_code=409, detail='An active patrol is using this team')
-    team.status = 'archived'
-    team.is_deleted = True
-    team.updated_by = current_user.id
+    archive_team_command(
+        db, organisation_id=current_user.organisation_id, team_id=team.id,
+        actor_user_id=current_user.id, expected_version=parse_expected_version(if_match),
+    )
     log_audit_event(
         db,
         actor_user_id=current_user.id,
@@ -427,7 +447,5 @@ def archive_team(
         action='team.archive',
         entity_type='team',
         entity_id=str(team.id),
-        commit=False,
     )
-    db.commit()
     return None

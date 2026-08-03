@@ -8,6 +8,7 @@ from . import models, schemas
 from .domain.registry import DomainObjectType
 from .services.domain_registry import register_domain_object
 from .services.sites import create_compatibility_site_for_customer
+from .services.tenant_validation import aggregate_mutation
 
 
 def _slugify(value: str) -> str:
@@ -65,7 +66,6 @@ def create_user(
     role: str = 'officer',
     created_by: int | None = None,
     organisation_id: int | None = None,
-    commit: bool = True,
 ):
     if organisation_id is None:
         raise ValueError('organisation_id is required')
@@ -93,19 +93,16 @@ def create_user(
         created_by=created_by,
         updated_by=created_by,
     )
-    db.add(employee)
-    db.flush()
+    with aggregate_mutation(db, 'employees'):
+        db.add(employee)
+        db.flush()
     register_domain_object(
         db,
         organisation_id=organisation_id,
         object_type=DomainObjectType.EMPLOYEE,
         object_id=employee.id,
     )
-    if commit:
-        db.commit()
-        db.refresh(db_user)
-    else:
-        db.flush()
+    db.flush()
     return db_user
 
 
@@ -124,7 +121,6 @@ def create_patrol(
     patrol: schemas.PatrolCreate,
     actor_user_id: int | None = None,
     organisation_id: int | None = None,
-    commit: bool = True,
 ):
     db_patrol = models.Patrol(
         name=patrol.name,
@@ -137,17 +133,14 @@ def create_patrol(
         updated_by=actor_user_id,
         organisation_id=organisation_id,
     )
-    db.add(db_patrol)
-    db.flush()
+    with aggregate_mutation(db, 'patrol_occurrences'):
+        db.add(db_patrol)
+        db.flush()
     register_domain_object(
         db, organisation_id=organisation_id,
         object_type=DomainObjectType.PATROL_OCCURRENCE, object_id=db_patrol.id,
     )
-    if commit:
-        db.commit()
-        db.refresh(db_patrol)
-    else:
-        db.flush()
+    db.flush()
     return db_patrol
 
 
@@ -157,24 +150,12 @@ def update_patrol(
     patrol_update: schemas.PatrolCreate,
     actor_user_id: int | None = None,
     organisation_id: int | None = None,
-    commit: bool = True,
 ):
-    db_patrol = get_patrol(db, patrol_id, organisation_id)
-    if not db_patrol:
-        return None
-    db_patrol.name = patrol_update.name
-    db_patrol.description = patrol_update.description
-    db_patrol.start_time = patrol_update.start_time
-    db_patrol.end_time = patrol_update.end_time
-    db_patrol.assigned_to = patrol_update.assigned_to
-    db_patrol.required_officers = patrol_update.required_officers
-    db_patrol.updated_by = actor_user_id
-    if commit:
-        db.commit()
-        db.refresh(db_patrol)
-    else:
-        db.flush()
-    return db_patrol
+    from .services.patrol_occurrences import update_patrol_occurrence
+    return update_patrol_occurrence(
+        db, patrol_id=patrol_id, payload=patrol_update,
+        actor_user_id=actor_user_id, organisation_id=organisation_id,
+    )
 
 
 def delete_patrol(
@@ -183,12 +164,11 @@ def delete_patrol(
     actor_user_id: int | None = None,
     organisation_id: int | None = None,
 ):
-    db_patrol = get_patrol(db, patrol_id, organisation_id)
-    if db_patrol:
-        db_patrol.is_deleted = True
-        db_patrol.updated_by = actor_user_id
-        db.commit()
-    return db_patrol
+    from .services.patrol_occurrences import cancel_patrol_occurrence
+    return cancel_patrol_occurrence(
+        db, patrol_id=patrol_id, actor_user_id=actor_user_id,
+        organisation_id=organisation_id,
+    )
 
 
 def get_patrol_logs(db: Session, skip: int = 0, limit: int = 100, organisation_id: int | None = None):
@@ -210,8 +190,7 @@ def create_patrol_log(
         organisation_id=organisation_id,
     )
     db.add(db_patrol_log)
-    db.commit()
-    db.refresh(db_patrol_log)
+    db.flush()
     return db_patrol_log
 
 
@@ -261,8 +240,7 @@ def create_incident(
         db, organisation_id=organisation_id,
         object_type=DomainObjectType.INCIDENT, object_id=db_incident.id,
     )
-    db.commit()
-    db.refresh(db_incident)
+    db.flush()
     return {
         'id': db_incident.id,
         'user_id': db_incident.reported_by,
@@ -297,8 +275,7 @@ def create_device(
         organisation_id=organisation_id,
     )
     db.add(db_device)
-    db.commit()
-    db.refresh(db_device)
+    db.flush()
     return db_device
 
 
@@ -316,8 +293,7 @@ def update_device(
     db_device.serial_number = device_update.serial_number
     db_device.status = device_update.status
     db_device.updated_by = actor_user_id
-    db.commit()
-    db.refresh(db_device)
+    db.flush()
     return db_device
 
 
@@ -331,7 +307,7 @@ def delete_device(
     if db_device:
         db_device.is_deleted = True
         db_device.updated_by = actor_user_id
-        db.commit()
+        db.flush()
     return db_device
 
 
@@ -350,7 +326,6 @@ def create_customer(
     customer: schemas.CustomerCreate,
     actor_user_id: int | None = None,
     organisation_id: int | None = None,
-    commit: bool = True,
 ):
     db_customer = models.Customer(
         name=customer.name,
@@ -368,13 +343,10 @@ def create_customer(
         object_type=DomainObjectType.CUSTOMER, object_id=db_customer.id,
     )
     create_compatibility_site_for_customer(
-        db, customer=db_customer, actor_user_id=actor_user_id,
+        db, organisation_id=organisation_id,
+        customer=db_customer, actor_user_id=actor_user_id,
     )
-    if commit:
-        db.commit()
-        db.refresh(db_customer)
-    else:
-        db.flush()
+    db.flush()
     return db_customer
 
 
@@ -384,7 +356,6 @@ def update_customer(
     customer_update: schemas.CustomerCreate,
     actor_user_id: int | None = None,
     organisation_id: int | None = None,
-    commit: bool = True,
 ):
     db_customer = get_customer(db, customer_id, organisation_id)
     if not db_customer:
@@ -394,11 +365,8 @@ def update_customer(
     db_customer.phone = customer_update.phone
     db_customer.address = customer_update.address
     db_customer.updated_by = actor_user_id
-    if commit:
-        db.commit()
-        db.refresh(db_customer)
-    else:
-        db.flush()
+    db_customer.record_version += 1
+    db.flush()
     return db_customer
 
 
@@ -407,16 +375,13 @@ def delete_customer(
     customer_id: int,
     actor_user_id: int | None = None,
     organisation_id: int | None = None,
-    commit: bool = True,
 ):
     db_customer = get_customer(db, customer_id, organisation_id)
     if db_customer:
         db_customer.is_deleted = True
         db_customer.updated_by = actor_user_id
-        if commit:
-            db.commit()
-        else:
-            db.flush()
+        db_customer.record_version += 1
+        db.flush()
     return db_customer
 
 
@@ -435,7 +400,6 @@ def create_alert(
     alert: schemas.AlertCreate,
     actor_user_id: int | None = None,
     organisation_id: int | None = None,
-    commit: bool = True,
 ):
     db_alert = models.Alert(
         title=alert.title,
@@ -454,17 +418,14 @@ def create_alert(
         updated_by=actor_user_id,
         organisation_id=organisation_id,
     )
-    db.add(db_alert)
-    db.flush()
+    with aggregate_mutation(db, 'incidents'):
+        db.add(db_alert)
+        db.flush()
     register_domain_object(
         db, organisation_id=organisation_id,
         object_type=DomainObjectType.INCIDENT, object_id=db_alert.id,
     )
-    if commit:
-        db.commit()
-        db.refresh(db_alert)
-    else:
-        db.flush()
+    db.flush()
     return db_alert
 
 
@@ -474,29 +435,12 @@ def update_alert(
     alert_update: schemas.AlertCreate,
     actor_user_id: int | None = None,
     organisation_id: int | None = None,
-    commit: bool = True,
 ):
-    db_alert = get_alert(db, alert_id, organisation_id)
-    if not db_alert:
-        return None
-    db_alert.title = alert_update.title
-    db_alert.description = alert_update.description
-    db_alert.category = alert_update.category
-    db_alert.location = alert_update.location
-    db_alert.resolution_notes = alert_update.resolution_notes
-    db_alert.severity = alert_update.severity
-    db_alert.status = alert_update.status
-    db_alert.reported_at = alert_update.reported_at
-    db_alert.patrol_id = alert_update.patrol_id
-    db_alert.device_id = alert_update.device_id
-    db_alert.customer_id = alert_update.customer_id
-    db_alert.updated_by = actor_user_id
-    if commit:
-        db.commit()
-        db.refresh(db_alert)
-    else:
-        db.flush()
-    return db_alert
+    from .services.incidents import update_incident
+    return update_incident(
+        db, incident_id=alert_id, payload=alert_update,
+        actor_user_id=actor_user_id, organisation_id=organisation_id,
+    )
 
 
 def delete_alert(
@@ -504,17 +448,12 @@ def delete_alert(
     alert_id: int,
     actor_user_id: int | None = None,
     organisation_id: int | None = None,
-    commit: bool = True,
 ):
-    db_alert = get_alert(db, alert_id, organisation_id)
-    if db_alert:
-        db_alert.is_deleted = True
-        db_alert.updated_by = actor_user_id
-        if commit:
-            db.commit()
-        else:
-            db.flush()
-    return db_alert
+    from .services.incidents import archive_incident
+    return archive_incident(
+        db, incident_id=alert_id, actor_user_id=actor_user_id,
+        organisation_id=organisation_id,
+    )
 
 
 def get_checkpoint(db: Session, checkpoint_id: int, organisation_id: int | None = None):
@@ -555,8 +494,7 @@ def create_checkpoint(
         db, organisation_id=organisation_id,
         object_type=DomainObjectType.CHECKPOINT, object_id=db_checkpoint.id,
     )
-    db.commit()
-    db.refresh(db_checkpoint)
+    db.flush()
     return db_checkpoint
 
 
@@ -579,8 +517,8 @@ def update_checkpoint(
     checkpoint.nfc_tag = checkpoint_update.nfc_tag
     checkpoint.status = checkpoint_update.status
     checkpoint.updated_by = actor_user_id
-    db.commit()
-    db.refresh(checkpoint)
+    checkpoint.record_version += 1
+    db.flush()
     return checkpoint
 
 
@@ -594,7 +532,8 @@ def delete_checkpoint(
     if checkpoint:
         checkpoint.is_deleted = True
         checkpoint.updated_by = actor_user_id
-        db.commit()
+        checkpoint.record_version += 1
+        db.flush()
     return checkpoint
 
 
@@ -604,25 +543,12 @@ def verify_checkpoint(
     payload: schemas.CheckpointVerify,
     actor_user_id: int,
     organisation_id: int | None = None,
-    commit: bool = True,
 ):
-    db_checkpoint = get_checkpoint(db, checkpoint_id, organisation_id)
-    if not db_checkpoint:
-        return None
-    db_checkpoint.status = 'verified'
-    db_checkpoint.verified_at = datetime.now(timezone.utc)
-    db_checkpoint.verified_by = actor_user_id
-    db_checkpoint.updated_by = actor_user_id
-    if payload.latitude is not None:
-        db_checkpoint.latitude = payload.latitude
-    if payload.longitude is not None:
-        db_checkpoint.longitude = payload.longitude
-    if commit:
-        db.commit()
-    else:
-        db.flush()
-    db.refresh(db_checkpoint)
-    return db_checkpoint
+    from .domain.errors import DomainError, DomainErrorCode
+    raise DomainError(
+        DomainErrorCode.UNSUPPORTED_COMPATIBILITY_WRITE,
+        'Checkpoint confirmation must use the canonical verification service.',
+    )
 
 
 def create_officer_location(
@@ -631,8 +557,14 @@ def create_officer_location(
     actor_user_id: int,
     organisation_id: int | None = None,
 ):
+    employee = db.query(models.Employee).filter(
+        models.Employee.organisation_id == organisation_id,
+        models.Employee.user_id == actor_user_id,
+    ).one_or_none()
     db_location = models.OfficerLocation(
         officer_user_id=actor_user_id,
+        employee_id=employee.id if employee else None,
+        employee_reference_source='canonical_user_mapping' if employee else 'legacy_user_only',
         patrol_id=location.patrol_id,
         latitude=location.latitude,
         longitude=location.longitude,
@@ -642,8 +574,7 @@ def create_officer_location(
         organisation_id=organisation_id,
     )
     db.add(db_location)
-    db.commit()
-    db.refresh(db_location)
+    db.flush()
     return db_location
 
 
@@ -683,7 +614,6 @@ def create_notification(
     notification: schemas.NotificationCreate,
     actor_user_id: int | None = None,
     organisation_id: int | None = None,
-    commit: bool = True,
 ):
     db_notification = models.Notification(
         title=notification.title,
@@ -695,17 +625,14 @@ def create_notification(
         updated_by=actor_user_id,
         organisation_id=organisation_id,
     )
-    db.add(db_notification)
-    db.flush()
+    with aggregate_mutation(db, 'notifications'):
+        db.add(db_notification)
+        db.flush()
     register_domain_object(
         db, organisation_id=organisation_id,
         object_type=DomainObjectType.NOTIFICATION, object_id=db_notification.id,
     )
-    if commit:
-        db.commit()
-        db.refresh(db_notification)
-    else:
-        db.flush()
+    db.flush()
     return db_notification
 
 
@@ -726,10 +653,11 @@ def mark_notification_read(
     notification = _tenant_filter(query, models.Notification, organisation_id).first()
     if not notification:
         return None
-    notification.read_at = datetime.now(timezone.utc)
-    notification.updated_by = user_id
-    db.commit()
-    db.refresh(notification)
+    with aggregate_mutation(db, 'notifications'):
+        notification.read_at = datetime.now(timezone.utc)
+        notification.updated_by = user_id
+        notification.record_version += 1
+        db.flush()
     return notification
 
 

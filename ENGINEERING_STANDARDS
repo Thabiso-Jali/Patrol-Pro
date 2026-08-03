@@ -150,6 +150,7 @@ The backend MUST enforce:
 - External or slow side effects SHOULD run through durable jobs with retry and idempotency.
 - Multi-instance features MUST NOT rely on process-local memory for shared state.
 - Business logic SHOULD live in focused services, not route handlers or UI components.
+- Application business logic MUST NOT perform raw SQL mutations against canonical domain tables unless an explicitly reviewed infrastructure service provides equivalent tenant validation, aggregate ownership enforcement, transaction ownership, event atomicity, immutability protection, and integration tests. Migration code is the separately reviewed exception.
 
 ---
 
@@ -373,7 +374,7 @@ Severity meanings:
 | H-02 | Frontend architecture | `frontend/src/App.js` is approximately 3,372 lines and contains navigation, authentication, API access, domain screens, dialogs, forms, and business calculations. | Split by domain route with a small shell, central API client, shared query/state primitives, reusable form controls, and independently testable components. | XL |
 | H-03 | Routing | Page selection is primarily local `activeNav` state rather than canonical URL routing. Deep links, refresh, browser navigation, support links, and route-level permission handling are limited. | Add accessible URL routing, guarded routes, not-found/forbidden screens, preserved intended destinations, and navigation tests. | M |
 | H-04 | Distributed security | Rate limiting is stored in a process-local Python dictionary keyed by IP and path. It resets on restart, differs per instance, and can grow without a global bound. | Use a shared, bounded rate limiter or trusted edge enforcement, define proxy-aware identity rules, and add endpoint-specific policies and observability. | M |
-| H-05 | Transactional audit | Several CRUD paths commit the business record before writing the audit event; notifications and related writes may use additional commits. A failure can leave incomplete history. | Define a unit-of-work boundary so required business state and audit outbox/event are committed atomically; deliver side effects after commit. | L |
+| H-05 | Transactional audit and delivery | Phase 1.5 canonical commands now commit business state, required audit/operational events and replay state atomically. Some compatibility paths still require boundary review, and external side effects do not yet use a transactional outbox. | Finish the compatibility-path audit and add an outbox before treating external delivery as atomic with domain state. | M |
 | H-06 | Time correctness | Persistent operational timestamps use timezone-naive `DateTime` columns and application code compensates during comparison. Day boundaries and DST can produce inconsistent results. | Adopt timezone-aware UTC instants, organisation timezone conversion for local schedules, a safe migration/backfill policy, and DST boundary tests. | L |
 | H-07 | API error contract | Most endpoints return free-form `{detail: string}` errors without stable codes, field details, or correlation IDs. The frontend must infer meaning from prose. | Implement the standard error envelope and request IDs; map validation, auth, conflict, rate-limit, and domain errors consistently. | M |
 | H-08 | Query scalability | Availability and recommendation logic expands team memberships and workloads through repeated queries and Python aggregation. This risks N+1 behaviour as tenants grow. | Profile representative volumes; replace repeated reads with bounded aggregate/join queries; add indexes, query-count tests, and performance budgets. | M |
@@ -391,8 +392,8 @@ Severity meanings:
 |---|---|---|---|---:|
 | M-01 | API collections | Pagination, filtering, sorting, search, response metadata, and maximum page sizes vary by endpoint; some lists load broad datasets into the UI. | Adopt one collection contract and reusable backend/frontend primitives. | M |
 | M-02 | API semantics | Create/delete status codes and response shapes vary across resources. | Publish and incrementally enforce one HTTP semantics matrix with contract tests. | S |
-| M-03 | Idempotency | Creation flows do not consistently protect against retry, double-click, or network-replay duplicates. | Add idempotency keys or domain uniqueness for consequential creates and make frontend submissions single-flight. | M |
-| M-04 | Status/state machines | Several lifecycle values remain loosely constrained strings, and some interfaces can offer transitions without a central transition model. | Define enums and explicit server-side state machines, database constraints, permission rules, and transition-specific UI. | M |
+| M-03 | Idempotency coverage | Phase 1.5 provides a tenant- and actor-scoped replay ledger for selected retry-prone canonical commands, but coverage is not yet universal and the frontend does not consistently submit single-flight keys. | Extend the established contract only to consequential workflows that need retry safety and add client single-flight behaviour. | S |
+| M-04 | Remaining lifecycle coverage | Phase 1.5 centralises canonical lifecycle transitions and adds database state constraints, while some compatibility models and interfaces still use loosely constrained states. | Migrate remaining touched workflows to the executable state catalogue and transition-specific UI without creating a second transition graph. | S |
 | M-05 | Patrol compatibility field | Patrol `assigned_to` remains a writable/display fallback beside structured team/officer assignments. | Make it read-only legacy history, backfill structured references where reliable, expose provenance, and remove it from new writes after compatibility review. | M |
 | M-06 | Officer staffing visibility | Officer views do not yet provide one authoritative view of available, deployed, off-shift, future leave, and unassigned-to-team states. | Introduce a clearly defined availability projection and consolidated filterable staffing board as underlying shift/leave data becomes authoritative. | L |
 | M-07 | Workforce modelling | Shifts, leave, fatigue, qualifications, licences, and site eligibility are not represented; assignment recommendations correctly cannot use them yet. | Design each as explicit tenant-scoped data with effective dates and audit history before incorporating it into recommendations. | XL |
@@ -473,3 +474,65 @@ Severity meanings:
 - When a feature touches a debt item, the team SHOULD fix the relevant boundary in the same change or document why it is deferred.
 - Effort and severity MUST be recalibrated after discovery; changing an estimate does not remove the requirement.
 - This roadmap is a living register. Each resolved item should link to tests, migration evidence where applicable, and the decision record.
+
+---
+
+## Phase 1.5 Integrity Migration Standard
+
+Database integrity changes MUST be additive and compatibility-first. A populated
+upgrade MUST inventory existing values, add structures before enforcing them,
+backfill only from deterministic same-tenant relationships, verify the backfill,
+and then enable constraints. Irregular data MUST stop the migration with an
+actionable error; it MUST NOT be silently discarded or reinterpreted.
+
+Mutable aggregate roots use an integer `record_version` beginning at 1. Owning
+services will increment it as part of the same transaction as the mutation.
+Append-only Operational Events, Verification Events, Evidence Links and event
+subject links deliberately do not have optimistic versions.
+
+State check constraints protect stored values and are generated in application
+metadata from the executable state catalogue. Alembic revisions retain a frozen
+snapshot of the catalogue as it existed when that revision was released. Legal
+transition edges remain owning-service rules.
+
+Commands that may be retried use the internal, tenant-scoped idempotency ledger.
+The uniqueness scope is organisation, actor scope, command type and idempotency
+key; the request fingerprint distinguishes a valid replay from key reuse with a
+different command. Raw request payloads and secrets MUST NOT be stored.
+
+A downgrade MUST fail transactionally when removing integrity structures would
+discard a native Employee reference, replay record, correction chain, approval,
+immutable snapshot, checksum, archive fact or optimistic version. Destructive
+rollback is never an acceptable way to make a downgrade succeed.
+
+## Operational immutability and corrections
+
+Operational facts MUST NOT be silently rewritten after their lifecycle boundary.
+The executable state catalogue defines those boundaries. Changes after the
+boundary MUST create a correction, amendment, replacement or superseding version
+that preserves the original record.
+
+Every controlled correction MUST use the bounded `CorrectionCommand`, trusted
+organisation context, an authenticated actor, elevated permission, non-empty
+reason and correlation ID. The owning aggregate service MUST validate the target,
+create the replacement fact and append its Operational Event inside one transaction.
+
+Append-only Verification Events, Operational Events, Event Subjects,
+acknowledgements and Evidence Links MUST reject ORM updates and hard deletion at
+the session flush boundary. Test cleanup and migration rollback are controlled
+infrastructure exceptions and MUST NOT use application sessions.
+
+## Concurrency and deterministic retry contract
+
+Conflict-sensitive commands MUST resolve tenant context from authentication,
+lock rows in the documented canonical order, and compare `record_version` inside
+the coordinated transaction. Compatibility routes accept optional `If-Match`;
+new clients MUST send it and controlled corrections MUST require it. A successful
+mutable aggregate command advances its version exactly once. Append-only facts
+remain unversioned.
+
+Retry-prone mutations accept a bounded `Idempotency-Key`. Scope is organisation,
+trusted actor, server-derived command type and normalized key. Fingerprints are
+canonical hashes of allow-listed command data. Raw bodies, credentials, tokens
+and evidence content MUST never enter replay metadata. A completed replay MUST
+return the original authoritative resource without another business event.

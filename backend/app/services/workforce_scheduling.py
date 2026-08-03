@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from .workforce_credentials import require_employee
+from .tenant_validation import aggregate_mutation
 
 
 def _validate_period(starts_at: datetime, ends_at: datetime) -> None:
@@ -30,8 +31,9 @@ def declare_availability(
         recurrence_rule=recurrence_rule,
         status='proposed',
     )
-    db.add(period)
-    db.flush()
+    with aggregate_mutation(db, 'workforce_scheduling'):
+        db.add(period)
+        db.flush()
     return period
 
 
@@ -54,6 +56,7 @@ def request_leave(
         leave_type=leave_type,
         status='requested',
     )
-    db.add(leave)
-    db.flush()
+    with aggregate_mutation(db, 'workforce_scheduling'):
+        db.add(leave)
+        db.flush()
     return leave

@@ -6,6 +6,7 @@ from ....database import SessionLocal
 from ....permissions import Permission
 from ....security import require_permissions
 from ....services.audit import log_audit_event
+from ....services.transactions import transactional_session
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ def get_db():
 @router.post('/locations', response_model=schemas.OfficerLocation)
 def create_location_ping(
     location: schemas.OfficerLocationCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(transactional_session),
     current_user: schemas.User = Depends(require_permissions(Permission.OPERATIONS_WRITE)),
 ):
     if location.patrol_id and not crud.get_patrol(db, location.patrol_id, current_user.organisation_id):
